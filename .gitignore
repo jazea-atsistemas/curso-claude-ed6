@@ -1,1 +1,9 @@
 node_modules
+
+# Angular build output and cache
+dist/
+.angular/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -73,7 +73,7 @@ Things to keep in mind:
 - **`web-shared`** is consumed from source (`main: src/index.ts`, no build step). Restart the frontend dev server after you change it. Export new pieces from `src/index.ts`. It provides `AuthStore` (token and user in localStorage), `AuthService`, `authGuard`, `authInterceptor` (adds the Bearer token) and `errorInterceptor` (on a 401 it clears the session and redirects to `/login`).
 - **API base URL**: every app proxies `/api` to `localhost:3000` (`proxy.conf.json`), and `environment.apiUrl` is `/api/v1`. `web-clientes` services inject the `API_URL` token, while `web-admin` and `web-empleados` services import `environment.apiUrl` directly.
 - **Design system**: each app's `src/styles.css` has its own copy. `web-shared/src/lib/styles/base.css` is not imported anywhere. A change to a shared style has to be copied into all three apps (`web-empleados` has extra rules).
-- **Roles**: the manager role is `'manager'`, not `'gerente'`. In `web-empleados`, the role-based menu filtering in `ShellComponent` only controls navigation. The API enforces the real authorization.
+- **Roles**: the manager role is `'manager'`, not `'gerente'`. In `web-empleados`, `roleGuard(...roles)` (`core/guards/role.guard.ts`) protects `/cocina`, `/barra` and `/salon` and redirects to `defaultRouteFor(role)`; `ShellComponent` filters the menu links with the same rules. These are client-side checks only. The API enforces the real authorization.
 
 ## Scripts
 

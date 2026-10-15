@@ -314,7 +314,15 @@ El lazy loading **no es universal**: `web-clientes` carga `LoginComponent` y `Re
 
 ### Filtrado por Rol (web-empleados)
 
-El filtrado por rol se resuelve **de navegación** mediante `computed()` en el `ShellComponent`, que decide qué enlaces se pintan en el menú:
+El acceso por rol se controla en dos niveles. Las rutas están protegidas con el guard funcional `roleGuard(...roles)` (`core/guards/role.guard.ts`): si el rol del usuario no está permitido, redirige a su página por defecto (`defaultRouteFor(role)`: cocinero y manager → `/cocina`, camarero → `/barra`). La ruta vacía `''` también redirige con `defaultRouteFor`.
+
+```tsx
+{ path: 'cocina', canActivate: [roleGuard('cocinero', 'manager')], loadComponent: ... },
+{ path: 'barra',  canActivate: [roleGuard('camarero', 'manager')], loadComponent: ... },
+{ path: 'salon',  canActivate: [roleGuard('camarero', 'manager')], loadComponent: ... }
+```
+
+Además, el `ShellComponent` decide con `computed()` qué enlaces se pintan en el menú:
 
 ```tsx
 export class ShellComponent {
@@ -330,11 +338,11 @@ export class ShellComponent {
         this.userRole() === 'camarero' || this.userRole() === 'manager'
     )
 
-    readonly defaultRoute = computed(() => { /* cocinero → /cocina, camarero → /barra */ })
+    readonly defaultRoute = computed(() => defaultRouteFor(this.userRole()))
 }
 ```
 
-El rol de gerente es `'manager'`, no `'gerente'`. La autorización real es responsabilidad de la API.
+El rol de gerente es `'manager'`, no `'gerente'`. El guard solo protege la navegación en el cliente; la autorización real sigue siendo responsabilidad de la API.
 
 ---
 

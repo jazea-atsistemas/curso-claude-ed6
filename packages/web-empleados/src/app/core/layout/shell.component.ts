@@ -2,6 +2,7 @@ import { Component, inject, computed } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/router';
 import { LucideAngularModule } from 'lucide-angular';
 import { AuthService, AuthStore } from '@resttek/web-shared';
+import { defaultRouteFor } from '../guards/role.guard';
 
 @Component({
   selector: 'app-shell',
@@ -31,13 +32,7 @@ export class ShellComponent {
     this.userRole() === 'camarero' || this.userRole() === 'manager'
   )
 
-  readonly defaultRoute = computed(() => {
-    const role = this.userRole()
-    if (role === 'cocinero') return '/cocina'
-    if (role === 'manager') return '/cocina'
-    if (role === 'camarero') return '/barra'
-    return '/login'
-  })
+  readonly defaultRoute = computed(() => defaultRouteFor(this.userRole()))
 
   logout(): void {
     this.authService.logout()
