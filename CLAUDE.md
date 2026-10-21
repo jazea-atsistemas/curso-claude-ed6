@@ -19,7 +19,7 @@ Run these from the repo root:
 ```bash
 npm install              # installs and links all workspaces
 npm run seed             # seed SQLite (NOT idempotent for dishes/orders: random IDs → duplicates on re-run)
-npm run dev:api          # tsx watch src/server.ts → :3000 (GET /health)
+npm run dev:api          # tsx watch src/server.ts → :3000 (GET /health); needs JWT_SECRET (>=32 chars) from packages/api/.env (copy .env.example), else it aborts
 npm run dev:admin        # ng serve with proxy → :4200
 npm run dev:empleados    # → :4201
 npm run dev:clientes     # → :4202

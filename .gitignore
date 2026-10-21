@@ -1,5 +1,10 @@
 node_modules
 
+# Secretos (.env.example sí se versiona)
+.env
+.env.*
+!.env.example
+
 # Angular build output and cache
 dist/
 .angular/

@@ -1,5 +1,15 @@
-import app from './app.js'
-import { dbConfig } from '@config/database.js'
+// El entorno se valida primero: si falta JWT_SECRET abortamos con un mensaje legible.
+try {
+    await import('@config/env.js')
+} catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`\nError de configuración: ${message}`)
+    console.error('Crea packages/api/.env a partir de .env.example (ver README) o exporta JWT_SECRET.\n')
+    process.exit(1)
+}
+
+const { default: app } = await import('./app.js')
+const { dbConfig } = await import('@config/database.js')
 
 const PORT = process.env.PORT || 3000
 
