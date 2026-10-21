@@ -51,6 +51,16 @@ Este comando ejecuta el script `packages/api/src/scripts/seed.ts`, que crea rest
 
 ### API
 
+La API exige la variable `JWT_SECRET` (mínimo 32 caracteres); sin ella aborta al arrancar con un mensaje de error. `npm run dev:api` carga automáticamente `packages/api/.env` si existe (`--env-file-if-exists`, Node 22+). Crea el archivo a partir del ejemplo y genera un secreto:
+
+```bash
+cp packages/api/.env.example packages/api/.env
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+# pega el resultado en JWT_SECRET= dentro de packages/api/.env
+```
+
+Opcionalmente `CORS_ORIGINS` (orígenes separados por comas; por defecto `localhost:4200-4202`). `.env` está en `.gitignore`; `.env.example` sí se versiona.
+
 ```bash
 # API Node.js (Express + TypeScript)
 npm run dev:api
