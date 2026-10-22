@@ -61,6 +61,23 @@ describe('SqliteOrderRepository tableNumber (Integration)', () => {
         expect(byId).toEqual({ 'o-table': 5, 'o-none': null, 'o-legacy': null })
     })
 
+    it('un pedido sin cobrar tiene total, pointsEarned y billedAt a null', async () => {
+        expect(await repo.findById('o-none')).toMatchObject({ total: null, pointsEarned: null, billedAt: null })
+    })
+
+    it('markAsBilled guarda la cuenta una sola vez', async () => {
+        const billedAt = new Date('2026-10-22T12:00:00.000Z')
+        expect(await repo.markAsBilled('o-none', { total: 10, pointsEarned: 1, billedAt })).toBe(true)
+        expect(await repo.findById('o-none')).toMatchObject({ total: 10, pointsEarned: 1, billedAt })
+
+        expect(await repo.markAsBilled('o-none', { total: 99, pointsEarned: 9, billedAt: new Date() })).toBe(false)
+        expect((await repo.findById('o-none'))?.total).toBe(10)
+    })
+
+    it('markAsBilled devuelve false para un pedido que no existe', async () => {
+        expect(await repo.markAsBilled('nope', { total: 1, pointsEarned: 0, billedAt: new Date() })).toBe(false)
+    })
+
     it('findByClientId should include tableNumber', async () => {
         const orders = await repo.findByClientId('client-1')
         expect(orders.find(o => o.id === 'o-table')?.tableNumber).toBe(5)

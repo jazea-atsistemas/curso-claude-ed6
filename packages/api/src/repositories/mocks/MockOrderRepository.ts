@@ -1,4 +1,4 @@
-import type { OrderRepository } from '@repositories/order.repository.js'
+import type { OrderRepository, BillData } from '@repositories/order.repository.js'
 import type { Order } from '@models/order.model.js'
 
 export class MockOrderRepository implements OrderRepository {
@@ -24,5 +24,14 @@ export class MockOrderRepository implements OrderRepository {
 
     async findByClientId(clientId: string): Promise<Order[]> {
         return this.orders.filter(o => o.clientId === clientId)
+    }
+
+    async markAsBilled(orderId: string, bill: BillData): Promise<boolean> {
+        const order = this.orders.find(o => o.id === orderId)
+        if (!order || order.billedAt) return false
+        order.total = bill.total
+        order.pointsEarned = bill.pointsEarned
+        order.billedAt = bill.billedAt
+        return true
     }
 }

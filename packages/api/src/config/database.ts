@@ -176,11 +176,42 @@ export class Database {
                 status TEXT NOT NULL,
                 FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE,
                 FOREIGN KEY(dish_id) REFERENCES dishes(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS points_rules (
+                restaurant_id TEXT PRIMARY KEY,
+                spend_amount REAL NOT NULL,
+                points_awarded INTEGER NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(restaurant_id) REFERENCES restaurants(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS client_points (
+                client_id TEXT NOT NULL,
+                restaurant_id TEXT NOT NULL,
+                balance INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(client_id, restaurant_id),
+                FOREIGN KEY(client_id) REFERENCES employees(id),
+                FOREIGN KEY(restaurant_id) REFERENCES restaurants(id)
             )
         `.split(';')
 
         for (const q of queries) {
             if (q.trim()) await this.run(q)
+        }
+
+        // CREATE TABLE IF NOT EXISTS no altera tablas ya creadas: las columnas
+        // nuevas de tablas existentes se añaden aquí, solo si faltan.
+        await this.addColumnIfMissing('orders', 'total', 'REAL')
+        await this.addColumnIfMissing('orders', 'points_earned', 'INTEGER')
+        await this.addColumnIfMissing('orders', 'billed_at', 'TEXT')
+    }
+
+    private async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {
+        const columns = await this.all<{ name: string }>(`PRAGMA table_info(${table})`)
+        if (!columns.some(c => c.name === column)) {
+            await this.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
         }
     }
 }

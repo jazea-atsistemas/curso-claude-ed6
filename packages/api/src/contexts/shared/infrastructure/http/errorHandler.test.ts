@@ -9,7 +9,10 @@ import {
     InvalidCapacityError,
     InvalidPeopleCountError,
     TableNumberRequiredError,
-    RestaurantNotFoundError
+    RestaurantNotFoundError,
+    OrderNotFoundError,
+    OrderAlreadyBilledError,
+    InvalidPointsRuleError
 } from '@errors/DomainErrors.js'
 
 const run = (err: unknown) => {
@@ -43,6 +46,18 @@ describe('errorHandler', () => {
         for (const err of [new TableNumberRequiredError(), new InvalidCapacityError(), new InvalidPeopleCountError()]) {
             expect(run(err).status).toHaveBeenCalledWith(400)
         }
+    })
+
+    it('responde 404 para OrderNotFoundError', () => {
+        expect(run(new OrderNotFoundError()).status).toHaveBeenCalledWith(404)
+    })
+
+    it('responde 409 para OrderAlreadyBilledError', () => {
+        expect(run(new OrderAlreadyBilledError()).status).toHaveBeenCalledWith(409)
+    })
+
+    it('responde 400 para InvalidPointsRuleError', () => {
+        expect(run(new InvalidPointsRuleError()).status).toHaveBeenCalledWith(400)
     })
 
     it('responde 500 para errores que no son AppError', () => {
