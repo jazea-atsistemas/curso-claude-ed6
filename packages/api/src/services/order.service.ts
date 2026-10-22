@@ -3,7 +3,15 @@ import type { Order, OrderItem } from '@models/order.model.js'
 import { normalizeOrderStatus } from '@models/order.model.js'
 import type { OrderRepository } from '@repositories/order.repository.js'
 import type { TableRepository } from '@repositories/table.repository.js'
-import { RestaurantIdRequiredError, OrderNotFoundError, TableNotFoundError, TableNotAvailableError } from '@errors/DomainErrors.js'
+import type { PackSelection, PackSelectionResolver } from '@services/pack.service.js'
+import { RestaurantIdRequiredError, OrderNotFoundError, TableNotFoundError, TableNotAvailableError, InvalidPackSelectionError } from '@errors/DomainErrors.js'
+
+export interface CreateOrderPackRequest {
+    packId: string
+    quantity?: number
+    notes?: string | null
+    selections: PackSelection[]
+}
 
 export interface CreateOrderRequest {
     restaurantId: string
@@ -14,12 +22,15 @@ export interface CreateOrderRequest {
         quantity: number
         notes: string | null
     }[]
+    packs?: CreateOrderPackRequest[]
 }
 
 export class OrderService {
     constructor(
         private readonly orderRepository: OrderRepository,
-        private readonly tableRepository: TableRepository
+        private readonly tableRepository: TableRepository,
+        // Opcional para no obligar a los tests de pedidos sin packs a montarlo
+        private readonly packResolver?: PackSelectionResolver
     ) {}
 
     async create(request: CreateOrderRequest): Promise<Order> {
@@ -30,17 +41,22 @@ export class OrderService {
         const tableNumber = await this.resolveTableNumber(request.restaurantId, request.tableId)
 
         const items: OrderItem[] = []
-        for (const item of request.items) {
+        for (const item of request.items ?? []) {
             for (let i = 0; i < item.quantity; i++) {
                 items.push({
                     id: randomUUID(),
                     dishId: item.dishId,
                     quantity: 1,
                     notes: item.notes,
-                    status: 'pendiente'
+                    status: 'pendiente',
+                    packId: null,
+                    packLineId: null,
+                    packName: null,
+                    packPrice: null
                 })
             }
         }
+        items.push(...await this.buildPackItems(request.restaurantId, request.packs ?? []))
 
         const order: Order = {
             id: randomUUID(),
@@ -55,6 +71,41 @@ export class OrderService {
         await this.orderRepository.create(order)
 
         return order
+    }
+
+    // Cada unidad de un pack es una línea (packLineId) con una fila por plato elegido,
+    // así cocina y barra siguen viendo platos sueltos con su propio estado.
+    private async buildPackItems(restaurantId: string, packs: CreateOrderPackRequest[]): Promise<OrderItem[]> {
+        if (packs.length === 0) return []
+        if (!this.packResolver) {
+            throw new InvalidPackSelectionError('Este servicio no admite packs')
+        }
+
+        const items: OrderItem[] = []
+        for (const request of packs) {
+            const quantity = request.quantity ?? 1
+            if (!Number.isInteger(quantity) || quantity < 1) {
+                throw new InvalidPackSelectionError('La cantidad de un pack debe ser un entero >= 1')
+            }
+            const { pack, dishIds } = await this.packResolver.resolveSelection(restaurantId, request.packId, request.selections)
+            for (let i = 0; i < quantity; i++) {
+                const packLineId = randomUUID()
+                for (const dishId of dishIds) {
+                    items.push({
+                        id: randomUUID(),
+                        dishId,
+                        quantity: 1,
+                        notes: request.notes ?? null,
+                        status: 'pendiente',
+                        packId: pack.id,
+                        packLineId,
+                        packName: pack.name,
+                        packPrice: pack.price
+                    })
+                }
+            }
+        }
+        return items
     }
 
     // Un pedido con mesa solo se acepta si la mesa es del restaurante y está ocupada

@@ -6,14 +6,15 @@ export class OrderController {
 
     async createOrder(req: Request, res: Response): Promise<void> {
         try {
-            const { restaurantId, tableId, items } = req.body
+            const { restaurantId, tableId, items, packs } = req.body
             const user = (req as any).user
             const clientId = user?.id ?? null
             const order = await this.orderService.create({
                 restaurantId,
                 tableId: tableId ?? null,
                 clientId,
-                items
+                items: items ?? [],
+                packs: packs ?? []
             })
             res.status(201).json(order)
         } catch (error) {
