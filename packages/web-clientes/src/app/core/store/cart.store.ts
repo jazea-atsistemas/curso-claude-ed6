@@ -1,4 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core'
+import { SelectedTable } from '../models/table.model'
+
+const TABLE_KEY = 'resttek.table'
 
 export interface Dish {
   id: string
@@ -22,6 +25,9 @@ export class CartStore {
   private readonly _items = signal<CartItem[]>([])
   private readonly _restaurantId = signal<string | null>(null)
 
+  private readonly _table = signal<SelectedTable | null>(this.loadTable())
+
+  readonly table = this._table.asReadonly()
   readonly items = this._items.asReadonly()
   readonly restaurantId = this._restaurantId.asReadonly()
 
@@ -77,5 +83,38 @@ export class CartStore {
   clear(): void {
     this._items.set([])
     this._restaurantId.set(null)
+  }
+
+  /** Mesa guardada para ese restaurante, o null si no hay o es de otro. */
+  tableFor(restaurantId: string): SelectedTable | null {
+    const table = this._table()
+    return table && table.restaurantId === restaurantId ? table : null
+  }
+
+  setTable(table: SelectedTable): void {
+    this._table.set(table)
+    try {
+      sessionStorage.setItem(TABLE_KEY, JSON.stringify(table))
+    } catch {
+      // sessionStorage no disponible: la mesa solo vive en memoria
+    }
+  }
+
+  clearTable(): void {
+    this._table.set(null)
+    try {
+      sessionStorage.removeItem(TABLE_KEY)
+    } catch {
+      // nada que limpiar
+    }
+  }
+
+  private loadTable(): SelectedTable | null {
+    try {
+      const raw = sessionStorage.getItem(TABLE_KEY)
+      return raw ? (JSON.parse(raw) as SelectedTable) : null
+    } catch {
+      return null
+    }
   }
 }

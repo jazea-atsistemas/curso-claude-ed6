@@ -1,10 +1,11 @@
 import { Component, inject, OnInit, signal, computed } from '@angular/core'
-import { ActivatedRoute, RouterLink } from '@angular/router'
+import { ActivatedRoute, Router, RouterLink } from '@angular/router'
 import { DecimalPipe } from '@angular/common'
 import { LucideAngularModule } from 'lucide-angular'
 import { DishService } from '../../core/services/dish.service'
 import { RestaurantService } from '../../core/services/restaurant.service'
 import { CartStore, Dish } from '../../core/store/cart.store'
+import { SelectedTable } from '../../core/models/table.model'
 import { Restaurant } from '../../core/models/restaurant.model'
 
 @Component({
@@ -17,6 +18,13 @@ import { Restaurant } from '../../core/models/restaurant.model'
         <div>
           <a routerLink="/restaurants" class="back-link">← Volver a restaurantes</a>
           <h1>{{ restaurant()?.name || 'Cargando...' }}</h1>
+          @if (table(); as t) {
+            <p class="table-info">
+              Mesa {{ t.number }} ·
+              <a [routerLink]="['/restaurants', t.restaurantId, 'mesa']" [queryParams]="{ cambiar: 1 }"
+                 (click)="confirmChange($event)">Cambiar mesa</a>
+            </p>
+          }
         </div>
       </div>
 
@@ -87,6 +95,11 @@ import { Restaurant } from '../../core/models/restaurant.model'
     .container {
       max-width: 1200px;
       margin: 0 auto;
+    }
+    .table-info {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-top: 4px;
     }
     .back-link {
       font-size: 13px;
@@ -209,6 +222,7 @@ import { Restaurant } from '../../core/models/restaurant.model'
 })
 export class RestaurantMenuComponent implements OnInit {
   private readonly route = inject(ActivatedRoute)
+  private readonly router = inject(Router)
   private readonly dishService = inject(DishService)
   private readonly restaurantService = inject(RestaurantService)
   readonly cartStore = inject(CartStore)
@@ -232,8 +246,22 @@ export class RestaurantMenuComponent implements OnInit {
     })
   })
 
+  readonly table = signal<SelectedTable | null>(null)
+
+  confirmChange(event: Event): void {
+    if (!confirm('Tu mesa actual seguirá ocupada hasta que la libere el personal. ¿Cambiar de mesa?')) {
+      event.preventDefault()
+    }
+  }
+
   ngOnInit(): void {
     const restaurantId = this.route.snapshot.paramMap.get('id')!
+    const table = this.cartStore.tableFor(restaurantId)
+    if (!table) {
+      this.router.navigate(['/restaurants', restaurantId, 'mesa'], { replaceUrl: true })
+      return
+    }
+    this.table.set(table)
     this.loadData(restaurantId)
   }
 

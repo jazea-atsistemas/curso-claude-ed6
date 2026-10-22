@@ -1,5 +1,6 @@
 import { Component, inject, signal } from '@angular/core'
 import { Router, RouterLink } from '@angular/router'
+import { HttpErrorResponse } from '@angular/common/http'
 import { DecimalPipe } from '@angular/common'
 import { CartStore } from '../../core/store/cart.store'
 import { OrderService } from '../../core/services/order.service'
@@ -45,6 +46,12 @@ import { OrderService } from '../../core/services/order.service'
 
           <aside class="order-summary card">
             <h3>Resumen</h3>
+            @if (cartStore.tableFor(cartStore.restaurantId()!); as t) {
+              <div class="summary-row">
+                <span>Mesa</span>
+                <span>{{ t.number }}</span>
+              </div>
+            }
             <div class="summary-row">
               <span>Items ({{ cartStore.itemCount() }})</span>
               <span>{{ cartStore.total() | number:'1.2-2' }} €</span>
@@ -198,6 +205,12 @@ export class CartComponent {
     const restaurantId = this.cartStore.restaurantId()
     if (!restaurantId || this.cartStore.items().length === 0) return
 
+    const table = this.cartStore.tableFor(restaurantId)
+    if (!table) {
+      this.router.navigate(['/restaurants', restaurantId, 'mesa'])
+      return
+    }
+
     this.loading.set(true)
     this.error.set(null)
 
@@ -207,12 +220,18 @@ export class CartComponent {
       notes: item.notes || null
     }))
 
-    this.orderService.createOrder(restaurantId, items).subscribe({
+    this.orderService.createOrder(restaurantId, table.tableId, items).subscribe({
       next: (order) => {
         this.cartStore.clear()
         this.router.navigate(['/orders', order.id])
       },
-      error: (err) => {
+      error: (err: HttpErrorResponse) => {
+        const code = err.error?.error
+        if (err.status === 400 && (code === 'TableNotAvailableError' || code === 'TableNotFoundError')) {
+          this.cartStore.clearTable()
+          this.router.navigate(['/restaurants', restaurantId, 'mesa'], { queryParams: { motivo: 'mesa-no-disponible' } })
+          return
+        }
         this.error.set('Error al confirmar el pedido. Inténtalo de nuevo.')
         this.loading.set(false)
       }
