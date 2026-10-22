@@ -18,6 +18,10 @@ erDiagram
     ingredients ||--o{ dish_ingredients : "usado en"
     orders ||--o{ order_items : "contiene"
     dishes ||--o{ order_items : "pedido como"
+    restaurants ||--o{ packs : "tiene"
+    packs ||--|{ pack_slots : "tiene"
+    pack_slots ||--o{ pack_slot_dishes : "lista"
+    dishes ||--o{ pack_slot_dishes : "listado en"
 
     restaurants {
         TEXT id PK
@@ -96,6 +100,35 @@ erDiagram
         INTEGER quantity
         TEXT notes
         TEXT status
+        TEXT pack_id
+        TEXT pack_line_id
+        TEXT pack_name
+        REAL pack_price
+    }
+
+    packs {
+        TEXT id PK
+        TEXT restaurant_id FK
+        TEXT name
+        TEXT description
+        REAL price
+        INTEGER active
+        TEXT created_at
+        TEXT updated_at
+    }
+
+    pack_slots {
+        TEXT id PK
+        TEXT pack_id FK
+        INTEGER position
+        TEXT name
+        TEXT category
+        TEXT restriction
+    }
+
+    pack_slot_dishes {
+        TEXT slot_id PK_FK
+        TEXT dish_id PK_FK
     }
 ```
 
@@ -243,10 +276,70 @@ Líneas de pedido. Cada ítem es un plato con cantidad y estado.
 | `quantity` | INTEGER | No | Cantidad pedida |
 | `notes` | TEXT | Sí | Notas del cliente (ej: "sin gluten") |
 | `status` | TEXT | No | Estado: pendiente, preparando, listo, entregado |
+| `pack_id` | TEXT | Sí | ID del pack si el plato se pidió dentro de uno. **Sin FK**: el pack se puede borrar sin tocar los pedidos |
+| `pack_line_id` | TEXT | Sí | UUID que comparten los platos de una misma unidad de pack |
+| `pack_name` | TEXT | Sí | Copia del nombre del pack al pedir |
+| `pack_price` | REAL | Sí | Copia del precio del pack al pedir |
 
 **Restricciones:**
 
 - ON DELETE CASCADE desde `orders.id`.
+
+**Packs en un pedido:** un pack pedido se guarda como una fila por plato elegido (cantidad 1 y su propio estado), así cocina y barra los tratan como cualquier otro plato. Todas las filas de esa unidad de pack comparten `pack_line_id` y llevan la copia de `pack_name` y `pack_price`. En un plato suelto las cuatro columnas son null. El importe se calcula con `calculateOrderItemsTotal()` (`models/order.model.ts`): un plato suelto suma `dishPrice × quantity` y cada `pack_line_id` suma `pack_price` una sola vez, sin contar el precio de sus platos.
+
+Las cuatro columnas de pack se añaden con `ALTER TABLE ... ADD COLUMN` si faltan (ver Notas técnicas).
+
+---
+
+### `packs`
+
+Packs (menús) de precio fijo: el cliente elige un plato en cada hueco.
+
+| Columna | Tipo | Nullable | Descripción |
+| --- | --- | --- | --- |
+| `id` | TEXT | No | UUID, clave primaria (el seed usa `rest-1-pack-menu-dia` y `rest-2-pack-pizza-bebida`) |
+| `restaurant_id` | TEXT | No | FK → `restaurants.id` |
+| `name` | TEXT | No | Nombre del pack (ej: "Menú del día") |
+| `description` | TEXT | Sí | Descripción |
+| `price` | REAL | No | Precio del pack en euros (> 0) |
+| `active` | INTEGER | No | 1 = se muestra y se puede pedir, 0 = oculto (default: 1) |
+| `created_at` | TEXT | No | Fecha de creación |
+| `updated_at` | TEXT | No | Fecha de última actualización |
+
+---
+
+### `pack_slots`
+
+Huecos de un pack, en orden. Cada hueco es una categoría de plato.
+
+| Columna | Tipo | Nullable | Descripción |
+| --- | --- | --- | --- |
+| `id` | TEXT | No | UUID, clave primaria (se regeneran al editar el pack) |
+| `pack_id` | TEXT | No | FK → `packs.id` |
+| `position` | INTEGER | No | Orden del hueco dentro del pack (desde 0) |
+| `name` | TEXT | No | Nombre visible (ej: "Bebida"); por defecto, la categoría |
+| `category` | TEXT | No | Categoría de plato: entrante, principal, postre, bebida |
+| `restriction` | TEXT | No | `bloquear` (todos los platos de la categoría menos los listados) o `permitir` (solo los listados). Default: `bloquear` |
+
+**Restricciones:**
+
+- FK a `packs.id` con `ON DELETE CASCADE`.
+
+---
+
+### `pack_slot_dishes`
+
+Platos listados en un hueco: bloqueados o permitidos según `pack_slots.restriction`.
+
+| Columna | Tipo | Nullable | Descripción |
+| --- | --- | --- | --- |
+| `slot_id` | TEXT | No | FK → `pack_slots.id` (PK compuesta) |
+| `dish_id` | TEXT | No | FK → `dishes.id` (PK compuesta) |
+
+**Restricciones:**
+
+- FK a `pack_slots.id` y a `dishes.id`, ambas con `ON DELETE CASCADE`: al borrar un plato desaparece de las listas de los packs.
+- Un plato solo se puede elegir en un hueco si es de su categoría, está disponible (`available = 1`) y la lista no lo excluye (`isDishAllowedInSlot()` en `models/pack.model.ts`).
 
 ---
 
@@ -263,6 +356,9 @@ Líneas de pedido. Cada ítem es un plato con cantidad y estado.
 | Dish ↔ Ingredient | N:M | Un plato usa varios ingredientes (via `dish_ingredients`) |
 | Order → OrderItems | 1:N | Un pedido tiene varios ítems |
 | Dish → OrderItems | 1:N | Un plato puede estar en varios ítems de pedido |
+| Restaurant → Packs | 1:N | Un restaurante tiene muchos packs |
+| Pack → PackSlots | 1:N | Un pack tiene uno o más huecos ordenados |
+| PackSlot ↔ Dish | N:M | Platos bloqueados o permitidos en un hueco (via `pack_slot_dishes`) |
 
 ---
 
@@ -273,5 +369,6 @@ Líneas de pedido. Cada ítem es un plato con cantidad y estado.
 - **Booleanos**: SQLite no tiene tipo BOOLEAN; se usa INTEGER (0 = false, 1 = true).
 - **Nomenclatura**: las columnas son `snake_case` y las propiedades TypeScript `camelCase`. La conversión se hace con alias en el propio SQL (`owner_first_name as ownerFirstName`).
 - **Migraciones**: Las tablas se crean automáticamente en `Database.initialize()` con `CREATE TABLE IF NOT EXISTS`.
-- **Sin migrations framework**: No se usa un sistema de migraciones formal. Los cambios de esquema se hacen modificando `runInitialMigrations()`. Como solo se ejecuta `CREATE TABLE IF NOT EXISTS`, **añadir una columna no afecta a una base de datos ya creada**: hay que borrar `packages/api/resttek.db` y volver a sembrar. Una tabla nueva (como `tables`) sí se crea al arrancar sobre una base de datos existente.
+- **Sin migrations framework**: No se usa un sistema de migraciones formal. Los cambios de esquema se hacen modificando `runInitialMigrations()`. `CREATE TABLE IF NOT EXISTS` no altera una tabla ya creada, así que las columnas nuevas de tablas existentes se añaden después con `addColumnIfMissing(tabla, columna, definición)`, que consulta `PRAGMA table_info` y solo ejecuta `ALTER TABLE ... ADD COLUMN` si falta (es idempotente). Así se añadieron las columnas de pack de `order_items`. Una tabla nueva (como `tables` o `packs`) se crea al arrancar sobre una base de datos existente.
+- **Seed**: el seed vacía antes todas las tablas en orden hijo → padre (`TABLES_TO_CLEAR` en `src/scripts/seed.ts`); una tabla nueva hay que añadirla ahí.
 - **`orders.table_id` sin FK**: SQLite no permite añadir una FK con `ALTER TABLE`, y `CREATE TABLE IF NOT EXISTS` no modifica tablas existentes. Los pedidos antiguos con un `table_id` que no es una mesa (p. ej. `'5'`) devuelven `tableNumber: null`.

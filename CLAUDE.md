@@ -48,7 +48,7 @@ The API mixes **two architectural styles**. Check which one a domain uses before
    - Use cases are classes with one `execute()` method and constructor injection.
    - Interfaces use an `I` prefix (`IEmployeeRepository`, `IAuthService`).
    - Dependencies are wired in `infrastructure/http/dependencies.ts`.
-2. **Layered, for `restaurant`, `dish`, `ingredient`, `order`, `table`** (`src/{models,repositories,services,controllers,routes}/<domain>.*.ts`)
+2. **Layered, for `restaurant`, `dish`, `ingredient`, `order`, `table`, `pack`** (`src/{models,repositories,services,controllers,routes}/<domain>.*.ts`)
    - Models are plain interfaces. Enums are validated by the `normalizeX()` functions in `models/`.
    - Each service has several methods, and validation lives in the service.
    - A repository interface has no `I` prefix and sits in the same file as its `Sqlite*` implementation.
@@ -61,7 +61,7 @@ Things to keep in mind:
 - **Imports**: imports use tsconfig path aliases (`@config/*`, `@errors/*`, `@shared/*`, `@employee/*`, `@models/*`, `@repositories/*`, `@services/*`, `@controllers/*`, `@routes/*`, `@scripts/*`). They must end in `.js` because the package is ESM with `module: nodenext`. At runtime `tsx` resolves the aliases; in tests `vite-tsconfig-paths` does.
 - **Routing**: all routes are mounted in `src/app.ts` under `/api/v1`. Nested routers such as `/restaurants/:restaurantId/...` need `Router({ mergeParams: true })`.
 - **Errors**: domain errors extend `AppError` (`src/errors/DomainErrors.ts`). `errorHandler` picks the HTTP status by error class name: an explicit list maps to 404, `InvalidCredentialsError` to 401, the `CONFLICT_ERRORS` list to 409, any other `AppError` to 400, everything else to 500. The body is `{ error: <class name>, message }`. **A new not-found error must be added to the 404 list in `errorHandler.ts`, and a new conflict error to `CONFLICT_ERRORS`.** `OrderController` is the exception: it uses its own try/catch and never calls `next(error)`.
-- **Database**: `src/config/database.ts` exports one shared `dbConfig` instance. Migrations are `CREATE TABLE IF NOT EXISTS` statements in `runInitialMigrations()`, and there is no separate migration tool. `PRAGMA foreign_keys = ON` is set, so test fixtures must insert parent rows (for example `restaurants`) before child rows. The DB file is `packages/api/resttek.db`; with `NODE_ENV=test` it is `:memory:`. SQL renames snake_case to camelCase with column aliases.
+- **Database**: `src/config/database.ts` exports one shared `dbConfig` instance. Migrations are `CREATE TABLE IF NOT EXISTS` statements in `runInitialMigrations()`, and there is no separate migration tool. New columns on existing tables go through `addColumnIfMissing()` (idempotent `ALTER TABLE ... ADD COLUMN`) in the same method. `PRAGMA foreign_keys = ON` is set, so test fixtures must insert parent rows (for example `restaurants`) before child rows. The DB file is `packages/api/resttek.db`; with `NODE_ENV=test` it is `:memory:`. SQL renames snake_case to camelCase with column aliases.
 - **Orders**: creating an order expands quantities, so `quantity: 3` is stored as 3 `order_items` rows with quantity 1 each. This lets each unit's status be tracked on its own. Order routes have no `authorize()`, only `authenticate`.
 - **Tests**: unit tests sit next to the code they test (`*.test.ts`). Test doubles are in `contexts/employee/application/mocks/` and `repositories/mocks/`. There are no HTTP or integration tests, and `supertest` is installed but unused.
 
