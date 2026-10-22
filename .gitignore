@@ -7,6 +7,8 @@ node_modules
 
 # Angular build output and cache
 dist/
+# Documentación estática de la API (npm run docs:build)
+docs-dist/
 .angular/
 
 # OS files
