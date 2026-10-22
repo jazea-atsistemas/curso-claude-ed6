@@ -1,0 +1,56 @@
+<div class="fade-in">
+  <div class="page-header">
+    <h1>Sistema de puntos</h1>
+  </div>
+  <p class="subtitle">Los clientes ganan puntos al pedir la cuenta: por cada X € gastados, Y puntos.</p>
+
+  @if (store.error()) {
+    <div class="alert-error">{{ store.error() }}</div>
+  }
+  @if (formError()) {
+    <div class="alert-error">{{ formError() }}</div>
+  }
+  @if (success()) {
+    <div class="alert-success">{{ success() }}</div>
+  }
+
+  @if (store.loading()) {
+    <div class="spinner"></div>
+  } @else if (!store.error()) {
+    <div class="card status-card">
+      <lucide-icon name="star" [size]="20"></lucide-icon>
+      @if (store.rule(); as rule) {
+        <span>Regla actual: por cada <strong>{{ rule.spendAmount }} €</strong>, <strong>{{ rule.pointsAwarded }}</strong> {{ rule.pointsAwarded === 1 ? 'punto' : 'puntos' }}.</span>
+      } @else {
+        <span>Este restaurante no tiene regla de puntos: los clientes no ganan puntos.</span>
+      }
+    </div>
+
+    <form (ngSubmit)="onSubmit()" class="card form-card">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="spendAmount">Por cada (€)</label>
+          <input id="spendAmount" type="number" class="form-control" [(ngModel)]="form.spendAmount" name="spendAmount" required min="0.01" step="0.01" placeholder="10" />
+        </div>
+
+        <div class="form-group">
+          <label for="pointsAwarded">Puntos que se ganan</label>
+          <input id="pointsAwarded" type="number" class="form-control" [(ngModel)]="form.pointsAwarded" name="pointsAwarded" required min="1" step="1" placeholder="1" />
+        </div>
+      </div>
+
+      <div class="form-actions">
+        @if (store.rule()) {
+          <button type="button" class="btn btn-danger" (click)="onDisable()" [disabled]="saving()">Desactivar</button>
+        }
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">
+          @if (saving()) {
+            Guardando...
+          } @else {
+            Guardar
+          }
+        </button>
+      </div>
+    </form>
+  }
+</div>
