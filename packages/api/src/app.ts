@@ -11,6 +11,8 @@ import publicRestaurantRoutes from '@routes/restaurant.public.routes.js'
 import publicDishRoutes from '@routes/dish.public.routes.js'
 import orderRoutes from '@routes/order.routes.js'
 import { errorHandler } from '@shared/infrastructure/http/errorHandler.js'
+import { openApiYaml, openApiDocument } from '@config/openapi.js'
+import swaggerUi from 'swagger-ui-express'
 
 const app = express()
 
@@ -31,6 +33,17 @@ app.use('/api/v1/restaurants/:restaurantId/employees', restaurantEmployeeRoutes)
 app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' })
 })
+
+// Documentación OpenAPI: especificación en bruto y Swagger UI
+app.get('/api/openapi.yaml', (_req, res) => {
+    res.type('application/yaml').send(openApiYaml)
+})
+app.get('/api/openapi.json', (_req, res) => {
+    res.status(200).json(openApiDocument)
+})
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument, {
+    customSiteTitle: 'Resttek API'
+}))
 
 app.use(errorHandler)
 
