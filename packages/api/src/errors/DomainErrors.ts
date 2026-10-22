@@ -210,3 +210,45 @@ export class InvalidPeopleCountError extends AppError {
     super('People count must be an integer >= 1')
   }
 }
+
+export class PackNotFoundError extends AppError {
+  constructor() {
+    super('Pack not found')
+  }
+}
+
+export class PackNameRequiredError extends AppError {
+  constructor() {
+    super('Pack name is required')
+  }
+}
+
+export class PackSlotsRequiredError extends AppError {
+  constructor() {
+    super('A pack needs at least one slot')
+  }
+}
+
+export class InvalidPackRestrictionError extends AppError {
+  constructor(message?: string) {
+    super(message ?? 'Invalid pack restriction')
+  }
+}
+
+export class InvalidPackSlotDishError extends AppError {
+  constructor(message?: string) {
+    super(message ?? 'Invalid dish in pack slot')
+  }
+}
+
+export class PackNotActiveError extends AppError {
+  constructor() {
+    super('Pack is not active')
+  }
+}
+
+export class InvalidPackSelectionError extends AppError {
+  constructor(message?: string) {
+    super(message ?? 'Invalid pack selection')
+  }
+}

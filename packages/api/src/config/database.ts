@@ -176,11 +176,56 @@ export class Database {
                 status TEXT NOT NULL,
                 FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE,
                 FOREIGN KEY(dish_id) REFERENCES dishes(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS packs (
+                id TEXT PRIMARY KEY,
+                restaurant_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                price REAL NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(restaurant_id) REFERENCES restaurants(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS pack_slots (
+                id TEXT PRIMARY KEY,
+                pack_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                restriction TEXT NOT NULL DEFAULT 'bloquear',
+                FOREIGN KEY(pack_id) REFERENCES packs(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS pack_slot_dishes (
+                slot_id TEXT NOT NULL,
+                dish_id TEXT NOT NULL,
+                PRIMARY KEY(slot_id, dish_id),
+                FOREIGN KEY(slot_id) REFERENCES pack_slots(id) ON DELETE CASCADE,
+                FOREIGN KEY(dish_id) REFERENCES dishes(id) ON DELETE CASCADE
             )
         `.split(';')
 
         for (const q of queries) {
             if (q.trim()) await this.run(q)
+        }
+
+        // Columnas añadidas a tablas existentes: CREATE TABLE IF NOT EXISTS no altera
+        // una BD ya creada, así que se añaden aquí de forma idempotente.
+        // Packs (#9): las líneas de un pack guardan una copia del nombre y precio del pack.
+        await this.addColumnIfMissing('order_items', 'pack_id', 'TEXT')
+        await this.addColumnIfMissing('order_items', 'pack_line_id', 'TEXT')
+        await this.addColumnIfMissing('order_items', 'pack_name', 'TEXT')
+        await this.addColumnIfMissing('order_items', 'pack_price', 'REAL')
+    }
+
+    private async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {
+        const columns = await this.all<{ name: string }>(`PRAGMA table_info(${table})`)
+        if (!columns.some(c => c.name === column)) {
+            await this.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
         }
     }
 }
