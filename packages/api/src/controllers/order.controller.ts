@@ -18,7 +18,7 @@ export class OrderController {
             res.status(201).json(order)
         } catch (error) {
             if (error instanceof Error) {
-                res.status(400).json({ error: error.message })
+                res.status(400).json({ error: error.name, message: error.message })
             } else {
                 res.status(500).json({ error: 'Internal Server Error' })
             }
