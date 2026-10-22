@@ -9,6 +9,11 @@ export interface OrderItem {
   dishName?: string
   dishPrice?: number
   dishCategory?: string
+  // Packs: los platos de un mismo pack comparten packLineId (null en un plato suelto)
+  packId?: string | null
+  packLineId?: string | null
+  packName?: string | null
+  packPrice?: number | null
 }
 
 export interface Order {
