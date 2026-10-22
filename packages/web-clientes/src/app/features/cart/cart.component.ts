@@ -5,6 +5,8 @@ import { DecimalPipe } from '@angular/common'
 import { CartStore } from '../../core/store/cart.store'
 import { OrderService } from '../../core/services/order.service'
 
+const PACK_ERRORS = ['PackNotFoundError', 'PackNotActiveError', 'InvalidPackSelectionError']
+
 @Component({
   selector: 'app-cart',
   standalone: true,
@@ -15,7 +17,7 @@ import { OrderService } from '../../core/services/order.service'
         <h1>Tu pedido</h1>
       </div>
 
-      @if (cartStore.items().length === 0) {
+      @if (cartStore.isEmpty()) {
         <div class="empty-state card">
           <p>Tu carrito está vacío</p>
           <a routerLink="/restaurants" class="btn btn-primary" style="margin-top: 16px;">
@@ -25,6 +27,28 @@ import { OrderService } from '../../core/services/order.service'
       } @else {
         <div class="cart-layout">
           <div class="cart-items">
+            @for (pack of cartStore.packs(); track pack.key) {
+              <div class="cart-item card">
+                <div class="item-info">
+                  <h3>{{ pack.name }}</h3>
+                  <ul class="pack-choices">
+                    @for (choice of pack.choices; track choice.slotId) {
+                      <li><span>{{ choice.slotName }}:</span> {{ choice.dishName }}</li>
+                    }
+                  </ul>
+                  <p class="item-price">{{ pack.price | number:'1.2-2' }} € / pack</p>
+                </div>
+                <div class="item-controls">
+                  <div class="quantity-selector">
+                    <button class="qty-btn" (click)="cartStore.updatePackQuantity(pack.key, pack.quantity - 1)">-</button>
+                    <span>{{ pack.quantity }}</span>
+                    <button class="qty-btn" (click)="cartStore.updatePackQuantity(pack.key, pack.quantity + 1)">+</button>
+                  </div>
+                  <span class="item-subtotal">{{ pack.price * pack.quantity | number:'1.2-2' }} €</span>
+                  <button class="btn btn-danger btn-sm" (click)="cartStore.removePack(pack.key)">Eliminar</button>
+                </div>
+              </div>
+            }
             @for (item of cartStore.items(); track item.dish.id) {
               <div class="cart-item card">
                 <div class="item-info">
@@ -112,6 +136,15 @@ import { OrderService } from '../../core/services/order.service'
     .item-price {
       color: var(--text-muted);
       font-size: 13px;
+    }
+    .pack-choices {
+      list-style: none;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .pack-choices span {
+      color: var(--text-muted);
     }
     .item-controls {
       display: flex;
@@ -203,7 +236,7 @@ export class CartComponent {
 
   confirmOrder(): void {
     const restaurantId = this.cartStore.restaurantId()
-    if (!restaurantId || this.cartStore.items().length === 0) return
+    if (!restaurantId || this.cartStore.isEmpty()) return
 
     const table = this.cartStore.tableFor(restaurantId)
     if (!table) {
@@ -220,7 +253,13 @@ export class CartComponent {
       notes: item.notes || null
     }))
 
-    this.orderService.createOrder(restaurantId, table.tableId, items).subscribe({
+    const packs = this.cartStore.packs().map(pack => ({
+      packId: pack.packId,
+      quantity: pack.quantity,
+      selections: pack.choices.map(c => ({ slotId: c.slotId, dishId: c.dishId }))
+    }))
+
+    this.orderService.createOrder(restaurantId, table.tableId, items, packs).subscribe({
       next: (order) => {
         this.cartStore.clear()
         this.router.navigate(['/orders', order.id])
@@ -232,7 +271,11 @@ export class CartComponent {
           this.router.navigate(['/restaurants', restaurantId, 'mesa'], { queryParams: { motivo: 'mesa-no-disponible' } })
           return
         }
-        this.error.set('Error al confirmar el pedido. Inténtalo de nuevo.')
+        if (err.status === 400 && PACK_ERRORS.includes(code)) {
+          this.error.set('Algún pack ha cambiado o ya no está disponible. Quítalo del carrito y vuelve a elegirlo desde la carta.')
+        } else {
+          this.error.set('Error al confirmar el pedido. Inténtalo de nuevo.')
+        }
         this.loading.set(false)
       }
     })

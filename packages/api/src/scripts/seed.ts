@@ -3,11 +3,15 @@ import { dbConfig } from '@config/database.js'
 import { BcryptAuthService } from '@employee/infrastructure/BcryptAuthService.js'
 import { SqliteEmployeeRepository } from '@employee/infrastructure/SqliteEmployeeRepository.js'
 import { Employee } from '@employee/domain/Employee.js'
+import { SqlitePackRepository } from '@repositories/pack.repository.js'
 
 // Orden hijo -> padre para no violar las foreign keys al borrar.
 const TABLES_TO_CLEAR = [
     'order_items',
     'orders',
+    'pack_slot_dishes',
+    'pack_slots',
+    'packs',
     'dish_ingredients',
     'dishes',
     'ingredients',
@@ -168,7 +172,13 @@ const seed = async () => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [randomUUID(), 'Agua Mineral', 'Agua mineral natural', 2.00, 'bebida', 'rest-1', 1, new Date().toISOString(), new Date().toISOString()])
 
-        console.log('Restaurant 1 dishes created: 3 dishes + 2 drinks')
+        const beerId = randomUUID()
+        await dbConfig.run(`
+            INSERT OR IGNORE INTO dishes (id, name, description, price, category, restaurant_id, available, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [beerId, 'Cerveza', 'Caña de cerveza', 3.00, 'bebida', 'rest-1', 1, new Date().toISOString(), new Date().toISOString()])
+
+        console.log('Restaurant 1 dishes created: 3 dishes + 3 drinks')
 
         const ingredientsRest2 = [
             { id: randomUUID(), name: 'Harina', unit: 'kg' },
@@ -199,6 +209,42 @@ const seed = async () => {
         `, [randomUUID(), 'Limonada Casera', 'Limonada recién hecha', 3.50, 'bebida', 'rest-2', 1, new Date().toISOString(), new Date().toISOString()])
 
         console.log('Restaurant 2 dishes created: 1 dish + 1 drink')
+
+        // Packs: el menú del día de rest-1 bloquea la cerveza entre las bebidas
+        const packRepo = new SqlitePackRepository(dbConfig)
+        const packNow = new Date().toISOString()
+        const menuDelDia = {
+            id: 'rest-1-pack-menu-dia',
+            restaurantId: 'rest-1',
+            name: 'Menú del día',
+            description: 'Entrante, principal y bebida (cerveza no incluida)',
+            price: 20,
+            active: true,
+            slots: [
+                { id: 'rest-1-pack-menu-dia-entrante', name: 'Entrante', category: 'entrante' as const, restriction: 'bloquear' as const, dishIds: [] },
+                { id: 'rest-1-pack-menu-dia-principal', name: 'Principal', category: 'principal' as const, restriction: 'bloquear' as const, dishIds: [] },
+                { id: 'rest-1-pack-menu-dia-bebida', name: 'Bebida', category: 'bebida' as const, restriction: 'bloquear' as const, dishIds: [beerId] }
+            ],
+            createdAt: packNow,
+            updatedAt: packNow
+        }
+        await packRepo.save(menuDelDia)
+        await packRepo.save({
+            id: 'rest-2-pack-pizza-bebida',
+            restaurantId: 'rest-2',
+            name: 'Pizza + bebida',
+            description: 'Cualquier pizza con una bebida',
+            price: 15,
+            active: true,
+            slots: [
+                { id: 'rest-2-pack-pizza-bebida-principal', name: 'Pizza', category: 'principal', restriction: 'permitir', dishIds: [dishNapoliId] },
+                { id: 'rest-2-pack-pizza-bebida-bebida', name: 'Bebida', category: 'bebida', restriction: 'bloquear', dishIds: [] }
+            ],
+            createdAt: packNow,
+            updatedAt: packNow
+        })
+
+        console.log('Packs created: Menú del día (rest-1), Pizza + bebida (rest-2)')
 
         const order1Id = randomUUID()
         await dbConfig.run(`
@@ -239,6 +285,16 @@ const seed = async () => {
                 INSERT OR IGNORE INTO order_items (id, order_id, dish_id, quantity, notes, status)
                 VALUES (?, ?, ?, ?, ?, ?)
             `, [randomUUID(), order1Id, drink2Id, 2, null, 'pendiente'])
+        }
+
+        // Un menú del día en el mismo pedido: una fila por plato elegido, unidas por pack_line_id
+        const packLineId = randomUUID()
+        for (const dishId of [dish3Id, dish1Id, drink2Id]) {
+            if (!dishId) continue
+            await dbConfig.run(`
+                INSERT OR IGNORE INTO order_items (id, order_id, dish_id, quantity, notes, status, pack_id, pack_line_id, pack_name, pack_price)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [randomUUID(), order1Id, dishId, 1, null, 'pendiente', menuDelDia.id, packLineId, menuDelDia.name, menuDelDia.price])
         }
 
         console.log('Sample orders created')

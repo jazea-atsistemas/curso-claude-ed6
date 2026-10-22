@@ -1,0 +1,119 @@
+<div class="fade-in">
+  <div class="page-header">
+    <div class="header-back">
+      <a [routerLink]="listUrl" class="back-link">
+        <lucide-icon name="chevron-left" [size]="18"></lucide-icon>
+      </a>
+      <h1>{{ pageTitle }}</h1>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="alert-error">{{ error() }}</div>
+  }
+
+  <form (ngSubmit)="onSubmit()" class="card form-card">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="name">Nombre del pack</label>
+        <input id="name" type="text" class="form-control" [(ngModel)]="form.name" name="name" required placeholder="Menú del día" />
+      </div>
+
+      <div class="form-group">
+        <label for="price">Precio (€)</label>
+        <input id="price" type="number" class="form-control" [(ngModel)]="form.price" name="price" required min="0.01" step="0.01" placeholder="20" />
+      </div>
+
+      <div class="form-group">
+        <label for="active">Activo (visible para los clientes)</label>
+        <select id="active" class="form-control" [(ngModel)]="form.active" name="active">
+          <option [ngValue]="true">Sí</option>
+          <option [ngValue]="false">No</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="description">Descripción (opcional)</label>
+        <input id="description" type="text" class="form-control" [(ngModel)]="form.description" name="description" placeholder="Entrante, principal y bebida" />
+      </div>
+    </div>
+
+    <div class="slots-section">
+      <div class="slots-header">
+        <h3>Huecos del pack</h3>
+        <p>El cliente elige un plato en cada hueco, en este orden.</p>
+      </div>
+
+      @for (slot of form.slots; track slot.key; let i = $index; let first = $first; let last = $last) {
+        <div class="slot-card">
+          <div class="slot-row">
+            <span class="slot-index">{{ i + 1 }}</span>
+            <div class="form-group">
+              <label [for]="'slot-name-' + slot.key">Nombre</label>
+              <input [id]="'slot-name-' + slot.key" type="text" class="form-control" [(ngModel)]="slot.name" [name]="'slot-name-' + slot.key" placeholder="Bebida" />
+            </div>
+            <div class="form-group">
+              <label [for]="'slot-category-' + slot.key">Categoría</label>
+              <select [id]="'slot-category-' + slot.key" class="form-control" [ngModel]="slot.category" (ngModelChange)="onCategoryChange(slot, $event)" [name]="'slot-category-' + slot.key">
+                @for (c of categories; track c) {
+                  <option [value]="c">{{ categoryLabel(c) }}</option>
+                }
+              </select>
+            </div>
+            <div class="form-group">
+              <label [for]="'slot-restriction-' + slot.key">Se puede elegir</label>
+              <select [id]="'slot-restriction-' + slot.key" class="form-control" [(ngModel)]="slot.restriction" [name]="'slot-restriction-' + slot.key">
+                <option value="bloquear">Todos menos los marcados</option>
+                <option value="permitir">Solo los marcados</option>
+              </select>
+            </div>
+            <div class="slot-actions">
+              <button type="button" class="btn btn-secondary btn-sm" title="Subir" [disabled]="first" (click)="moveSlot(i, -1)">
+                <lucide-icon name="arrow-up" [size]="14"></lucide-icon>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" title="Bajar" [disabled]="last" (click)="moveSlot(i, 1)">
+                <lucide-icon name="arrow-down" [size]="14"></lucide-icon>
+              </button>
+              <button type="button" class="btn btn-danger btn-sm" title="Quitar hueco" (click)="removeSlot(i)">
+                <lucide-icon name="trash-2" [size]="14"></lucide-icon>
+              </button>
+            </div>
+          </div>
+
+          <div class="slot-dishes">
+            <span class="slot-dishes-label">
+              {{ slot.restriction === 'bloquear' ? 'Marca los platos que NO se pueden elegir:' : 'Marca los platos que se pueden elegir:' }}
+            </span>
+            @for (d of dishesOf(slot.category); track d.id) {
+              <label class="dish-check" [class.blocked]="slot.restriction === 'bloquear' && slot.dishIds.includes(d.id)">
+                <input type="checkbox" [checked]="slot.dishIds.includes(d.id)" (change)="toggleDish(slot, d.id, $any($event.target).checked)" />
+                {{ d.name }}
+                @if (!d.available) {
+                  <span class="badge badge-muted">no disponible</span>
+                }
+              </label>
+            } @empty {
+              <span class="slot-empty">No hay platos de esta categoría.</span>
+            }
+          </div>
+        </div>
+      }
+
+      <button type="button" class="btn btn-secondary" (click)="addSlot()">
+        <lucide-icon name="plus" [size]="16"></lucide-icon>
+        Añadir hueco
+      </button>
+    </div>
+
+    <div class="form-actions">
+      <a [routerLink]="listUrl" class="btn btn-secondary">Cancelar</a>
+      <button type="submit" class="btn btn-primary" [disabled]="loading()">
+        @if (loading()) {
+          Guardando...
+        } @else {
+          Guardar
+        }
+      </button>
+    </div>
+  </form>
+</div>

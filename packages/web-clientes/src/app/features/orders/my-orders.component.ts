@@ -2,7 +2,7 @@ import { Component, inject, OnInit, OnDestroy, signal } from '@angular/core'
 import { RouterLink } from '@angular/router'
 import { DatePipe, DecimalPipe } from '@angular/common'
 import { OrderService } from '../../core/services/order.service'
-import { Order } from '../../core/models/order.model'
+import { Order, orderItemsTotal } from '../../core/models/order.model'
 
 @Component({
   selector: 'app-my-orders',
@@ -170,6 +170,6 @@ export class MyOrdersComponent implements OnInit, OnDestroy {
   }
 
   getOrderTotal(order: Order): number {
-    return order.items.reduce((sum, item) => sum + (item.dishPrice || 0) * item.quantity, 0)
+    return orderItemsTotal(order.items)
   }
 }

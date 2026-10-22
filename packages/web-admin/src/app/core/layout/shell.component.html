@@ -32,6 +32,10 @@
                 <lucide-icon name="utensils" [size]="14"></lucide-icon>
                 <span>Platos</span>
               </a>
+              <a [routerLink]="['/restaurants', r.id, 'packs']" routerLinkActive="active" class="sub-nav-item">
+                <lucide-icon name="layers" [size]="14"></lucide-icon>
+                <span>Packs</span>
+              </a>
               <a [routerLink]="['/restaurants', r.id, 'ingredients']" routerLinkActive="active" class="sub-nav-item">
                 <lucide-icon name="package" [size]="14"></lucide-icon>
                 <span>Ingredientes</span>

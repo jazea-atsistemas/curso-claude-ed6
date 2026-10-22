@@ -3,6 +3,8 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router'
 import { DecimalPipe } from '@angular/common'
 import { LucideAngularModule } from 'lucide-angular'
 import { DishService } from '../../core/services/dish.service'
+import { PackService } from '../../core/services/pack.service'
+import { Pack, PackChoice } from '../../core/models/pack.model'
 import { RestaurantService } from '../../core/services/restaurant.service'
 import { CartStore, Dish } from '../../core/store/cart.store'
 import { SelectedTable } from '../../core/models/table.model'
@@ -35,6 +37,49 @@ import { Restaurant } from '../../core/models/restaurant.model'
       } @else {
         <div class="menu-layout">
           <div class="menu-content">
+            @if (packs().length > 0) {
+              <div class="category-section">
+                <h2 class="category-title">Packs</h2>
+                <div class="dishes-grid">
+                  @for (pack of packs(); track pack.id) {
+                    <div class="pack-card card">
+                      <div class="dish-card-row">
+                        <div class="dish-info">
+                          <h3>{{ pack.name }}</h3>
+                          <p class="dish-description">{{ pack.description || slotSummary(pack) }}</p>
+                          <p class="dish-price">{{ pack.price | number:'1.2-2' }} €</p>
+                        </div>
+                        @if (openPackId() !== pack.id) {
+                          <button class="btn btn-primary btn-sm" (click)="openPack(pack)">Elegir</button>
+                        }
+                      </div>
+                      @if (openPackId() === pack.id) {
+                        <div class="pack-chooser">
+                          @for (slot of pack.slots; track slot.id) {
+                            <label class="pack-slot">
+                              <span>{{ slot.name }}</span>
+                              <select class="form-control" [value]="packSelection()[slot.id] || ''"
+                                      (change)="choose(slot.id, $any($event.target).value)">
+                                <option value="" disabled>Elige {{ slot.name.toLowerCase() }}…</option>
+                                @for (option of slot.options; track option.id) {
+                                  <option [value]="option.id">{{ option.name }}</option>
+                                }
+                              </select>
+                            </label>
+                          }
+                          <div class="pack-actions">
+                            <button class="btn btn-secondary btn-sm" (click)="closePack()">Cancelar</button>
+                            <button class="btn btn-primary btn-sm" [disabled]="!isPackComplete(pack)" (click)="addPackToCart(pack)">
+                              Añadir pack
+                            </button>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
             @for (category of categories(); track category) {
               <div class="category-section">
                 <h2 class="category-title">{{ category }}</h2>
@@ -67,10 +112,16 @@ import { Restaurant } from '../../core/models/restaurant.model'
 
           <aside class="cart-summary card">
             <h3>Tu pedido</h3>
-            @if (cartStore.items().length === 0) {
+            @if (cartStore.isEmpty()) {
               <p class="empty-cart">Tu carrito está vacío</p>
             } @else {
               <div class="cart-items">
+                @for (pack of cartStore.packs(); track pack.key) {
+                  <div class="cart-item">
+                    <span class="item-name">{{ pack.name }} x{{ pack.quantity }}</span>
+                    <span class="item-price">{{ pack.price * pack.quantity | number:'1.2-2' }} €</span>
+                  </div>
+                }
                 @for (item of cartStore.items(); track item.dish.id) {
                   <div class="cart-item">
                     <span class="item-name">{{ item.dish.name }} x{{ item.quantity }}</span>
@@ -179,6 +230,42 @@ import { Restaurant } from '../../core/models/restaurant.model'
       background: var(--green-glow);
       color: var(--green-light);
     }
+    .pack-card {
+      padding: 16px 20px;
+    }
+    .dish-card-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+    .pack-chooser {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border-color);
+    }
+    .pack-slot {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    @media (max-width: 600px) {
+      .pack-slot {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+    }
+    .pack-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
     .cart-summary {
       position: sticky;
       top: 84px;
@@ -224,11 +311,17 @@ export class RestaurantMenuComponent implements OnInit {
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
   private readonly dishService = inject(DishService)
+  private readonly packService = inject(PackService)
   private readonly restaurantService = inject(RestaurantService)
   readonly cartStore = inject(CartStore)
 
   readonly restaurant = signal<Restaurant | null>(null)
   readonly dishes = signal<Dish[]>([])
+  readonly packs = signal<Pack[]>([])
+  readonly openPackId = signal<string | null>(null)
+  /** slotId → dishId del pack que se está eligiendo */
+  readonly packSelection = signal<Record<string, string>>({})
+  private restaurantId = ''
   readonly loading = signal(true)
   readonly error = signal<string | null>(null)
   private quantities = signal<Record<string, number>>({})
@@ -262,12 +355,18 @@ export class RestaurantMenuComponent implements OnInit {
       return
     }
     this.table.set(table)
+    this.restaurantId = restaurantId
     this.loadData(restaurantId)
   }
 
   private loadData(restaurantId: string): void {
     this.restaurantService.getById(restaurantId).subscribe({
       next: (restaurant) => this.restaurant.set(restaurant),
+      error: () => {}
+    })
+    // Sin packs la carta sigue funcionando: un error aquí no bloquea los platos
+    this.packService.getByRestaurant(restaurantId).subscribe({
+      next: (packs) => this.packs.set(packs),
       error: () => {}
     })
     this.dishService.getByRestaurant(restaurantId).subscribe({
@@ -305,5 +404,46 @@ export class RestaurantMenuComponent implements OnInit {
     const quantity = this.getQuantity(dish.id)
     this.cartStore.addItem(dish, quantity)
     this.quantities.update(q => ({ ...q, [dish.id]: 1 }))
+  }
+
+  slotSummary(pack: Pack): string {
+    return pack.slots.map(s => s.name).join(' + ')
+  }
+
+  openPack(pack: Pack): void {
+    this.openPackId.set(pack.id)
+    // Si un hueco solo tiene una opción, se elige sola
+    const preselected: Record<string, string> = {}
+    for (const slot of pack.slots) {
+      if (slot.options.length === 1) preselected[slot.id] = slot.options[0].id
+    }
+    this.packSelection.set(preselected)
+  }
+
+  closePack(): void {
+    this.openPackId.set(null)
+    this.packSelection.set({})
+  }
+
+  choose(slotId: string, dishId: string): void {
+    this.packSelection.update(sel => ({ ...sel, [slotId]: dishId }))
+  }
+
+  isPackComplete(pack: Pack): boolean {
+    const sel = this.packSelection()
+    return pack.slots.every(slot => slot.options.some(o => o.id === sel[slot.id]))
+  }
+
+  addPackToCart(pack: Pack): void {
+    if (!this.isPackComplete(pack)) return
+    const sel = this.packSelection()
+    const choices: PackChoice[] = pack.slots.map(slot => ({
+      slotId: slot.id,
+      slotName: slot.name,
+      dishId: sel[slot.id],
+      dishName: slot.options.find(o => o.id === sel[slot.id])!.name
+    }))
+    this.cartStore.addPack(this.restaurantId, pack, choices)
+    this.closePack()
   }
 }

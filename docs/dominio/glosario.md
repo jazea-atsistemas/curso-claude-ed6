@@ -17,12 +17,16 @@ Terminología del dominio y conceptos técnicos utilizados en el proyecto Restte
 | **DishIngredient** | Relación entre un plato y un ingrediente, con la cantidad necesaria. |
 | **Order** | Pedido realizado por un cliente. Contiene ítems (platos) y está asociado a un restaurante. |
 | **OrderItem** | Línea de un pedido: un plato con cantidad, notas opcionales y estado. |
+| **Pack** | Menú de precio fijo de un restaurante (ej: "Menú del día" por 20 €). Tiene nombre, precio, si está activo y una lista ordenada de huecos. El cliente elige un plato por hueco y paga el precio del pack, no el de los platos. |
+| **PackSlot (hueco)** | Hueco de un pack: una categoría de plato (entrante, principal…) con una restricción `bloquear` (todos menos los listados, ej: bebidas sin cerveza) o `permitir` (solo los listados). |
+| **Línea de pack** | Una unidad de pack dentro de un pedido. Sus platos son `OrderItem` normales que comparten `packLineId` y guardan una copia del nombre y precio del pack. |
 | **Table** | Mesa de un restaurante. Tiene número (único por restaurante), descripción opcional, capacidad y estado. Un pedido puede asociarse a una mesa `ocupada` de su restaurante. |
 
 Dos particularidades del modelo que conviene tener presentes:
 
 - **Los clientes son `Employee`.** No hay entidad ni tabla de clientes: un cliente es una fila de `employees` con `role = 'cliente'` y `restaurant_id = null`. Por eso el login es el mismo endpoint para todos y la respuesta se llama `employee` incluso al registrarse como cliente.
 - **Cada unidad pedida es un `OrderItem`.** Al crear un pedido con 3 unidades de un plato se generan 3 filas con `quantity: 1`, para que cocina pueda marcar el estado de cada una por separado.
+- **Un pack pedido son varios `OrderItem`.** Cada plato elegido es una fila con su estado, unida a las demás por `packLineId`. Para el importe hay que usar `calculateOrderItemsTotal()`, que cuenta el precio del pack una vez por línea.
 
 ### Roles
 

@@ -3,7 +3,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router'
 import { DecimalPipe, DatePipe, NgClass } from '@angular/common'
 import { LucideAngularModule } from 'lucide-angular'
 import { OrderService } from '../../core/services/order.service'
-import { Order, OrderItem } from '../../core/models/order.model'
+import { Order, OrderItem, orderItemsTotal } from '../../core/models/order.model'
 
 @Component({
   selector: 'app-order-detail',
@@ -37,6 +37,27 @@ import { Order, OrderItem } from '../../core/models/order.model'
           <div class="ticket-divider"></div>
 
           <div class="ticket-items">
+            @for (pack of packGroups(); track pack.packLineId) {
+              <div class="ticket-item">
+                <div class="item-main">
+                  <span class="item-qty">1x</span>
+                  <span class="item-name">{{ pack.packName }}</span>
+                </div>
+                <div class="item-status">
+                  <ul class="pack-dishes">
+                    @for (dish of pack.items; track dish.id) {
+                      <li>
+                        <span>{{ dish.dishName || 'Plato' }}</span>
+                        <span class="status-badge" [ngClass]="getStatusClass(getStatusString(dish.status))">
+                          {{ getStatusLabel(getStatusString(dish.status)) }}
+                        </span>
+                      </li>
+                    }
+                  </ul>
+                  <span class="item-price">{{ pack.packPrice | number:'1.2-2' }} €</span>
+                </div>
+              </div>
+            }
             @for (group of groupedItems(); track group.dishId) {
               <div class="ticket-item">
                 <div class="item-main">
@@ -161,6 +182,19 @@ import { Order, OrderItem } from '../../core/models/order.model'
       background: rgba(139, 146, 168, 0.1);
       color: var(--text-secondary);
     }
+    .pack-dishes {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .pack-dishes li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
     .item-price {
       color: var(--text-secondary);
       font-size: 13px;
@@ -211,7 +245,7 @@ export class OrderDetailComponent implements OnInit, OnDestroy {
   getTotal(): number {
     const o = this.order()
     if (!o) return 0
-    return o.items.reduce((sum, item) => sum + (item.dishPrice || 0) * item.quantity, 0)
+    return orderItemsTotal(o.items)
   }
 
   getStatusLabel(status: string): string {
@@ -235,8 +269,29 @@ export class OrderDetailComponent implements OnInit, OnDestroy {
     return status?.value || 'pendiente'
   }
 
+  /** Cada pack pedido (packLineId) con sus platos y el estado de cada uno. */
+  packGroups = computed(() => {
+    const groups = new Map<string, { packLineId: string; packName: string; packPrice: number; items: OrderItem[] }>()
+    for (const item of this.order()?.items || []) {
+      if (!item.packLineId) continue
+      const group = groups.get(item.packLineId)
+      if (group) {
+        group.items.push(item)
+      } else {
+        groups.set(item.packLineId, {
+          packLineId: item.packLineId,
+          packName: item.packName || 'Pack',
+          packPrice: item.packPrice || 0,
+          items: [item]
+        })
+      }
+    }
+    return Array.from(groups.values())
+  })
+
+  /** Platos sueltos (fuera de packs) agrupados por plato. */
   groupedItems = computed(() => {
-    const items = this.order()?.items || []
+    const items = (this.order()?.items || []).filter(item => !item.packLineId)
     const groups = new Map<string, { dishId: string; dishName: string; dishPrice: number; statusCounts: { status: string; count: number }[] }>()
 
     for (const item of items) {

@@ -31,6 +31,9 @@
                 <div class="item-info">
                   <span class="item-quantity">{{ item.quantity }}x</span>
                   <span class="item-name">{{ item.dishName || 'Plato' }}</span>
+                  @if (item.packName) {
+                    <span class="item-pack">{{ item.packName }}</span>
+                  }
                   @if (item.notes) {
                     <span class="item-notes">{{ item.notes }}</span>
                   }

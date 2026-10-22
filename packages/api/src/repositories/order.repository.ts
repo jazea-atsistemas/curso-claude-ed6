@@ -23,6 +23,10 @@ interface OrderItemRow {
     quantity: number
     notes: string | null
     status: string
+    pack_id: string | null
+    pack_line_id: string | null
+    pack_name: string | null
+    pack_price: number | null
 }
 
 interface OrderItemWithDishRow extends OrderItemRow {
@@ -50,8 +54,10 @@ export class SqliteOrderRepository implements OrderRepository {
 
         for (const item of order.items) {
             await this.db.run(
-                'INSERT INTO order_items (id, order_id, dish_id, quantity, notes, status) VALUES (?, ?, ?, ?, ?, ?)',
-                [item.id, order.id, item.dishId, item.quantity, item.notes, item.status]
+                `INSERT INTO order_items (id, order_id, dish_id, quantity, notes, status, pack_id, pack_line_id, pack_name, pack_price)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [item.id, order.id, item.dishId, item.quantity, item.notes, item.status,
+                    item.packId ?? null, item.packLineId ?? null, item.packName ?? null, item.packPrice ?? null]
             )
         }
     }
@@ -153,6 +159,7 @@ export class SqliteOrderRepository implements OrderRepository {
             FROM order_items oi
             LEFT JOIN dishes d ON oi.dish_id = d.id
             WHERE oi.order_id = ?
+            ORDER BY oi.rowid ASC
         `, [orderId])
 
         return itemRows.map(row => ({
@@ -163,7 +170,11 @@ export class SqliteOrderRepository implements OrderRepository {
             status: normalizeOrderStatus(row.status),
             dishName: row.dish_name,
             dishPrice: row.dish_price,
-            dishCategory: row.dish_category
+            dishCategory: row.dish_category,
+            packId: row.pack_id ?? null,
+            packLineId: row.pack_line_id ?? null,
+            packName: row.pack_name ?? null,
+            packPrice: row.pack_price ?? null
         }))
     }
 }

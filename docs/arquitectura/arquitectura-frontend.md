@@ -52,8 +52,8 @@ src/app/
 ├── app.routes.ts
 ├── core/
 │   ├── layout/            → shell.component.ts
-│   ├── models/            → dish, order, restaurant, table
-│   ├── services/          → dish, order, restaurant, table
+│   ├── models/            → dish, order, pack, restaurant, table
+│   ├── services/          → dish, order, pack, restaurant, table
 │   └── store/             → cart.store.ts
 └── features/
     ├── cart/cart.component.ts
@@ -116,6 +116,12 @@ Caso particular en `web-empleados`:
 - **`web-empleados`**: página `/mesas` (camarero, manager y cocinero). Muestra cada mesa con su estado y, para las ocupadas, los ítems no `entregado` de sus pedidos activos (cruza `OrderStore.orders()` por `tableId`; `GET /orders/active` devuelve también los ítems entregados). Solo camarero y manager ven los botones de cambio de estado. Cocina, barra y salón muestran `Mesa {tableNumber}`.
 - **`web-clientes`**: tras elegir restaurante se va a `restaurants/:id/mesa` (`TableSelectComponent`): nº de personas → `GET /available` → "Continuar" llama a `POST /{id}/occupy` (un 409 recarga la lista con "Esa mesa acaba de ocuparse"). `CartStore` guarda la mesa en `sessionStorage` (`resttek.table`, siempre en `try/catch`). La carta redirige a `/mesa` si no hay mesa para ese restaurante, y `/mesa` redirige a la carta si ya la hay. El pedido envía `tableId`; un 400 `TableNotAvailableError`/`TableNotFoundError` limpia la mesa y vuelve a la selección. Las mesas solo las libera el personal.
 
+### Packs
+
+- **`web-admin`**: feature `features/packs` (`pack-list`, `pack-form`, `packs.routes.ts`, `PackStore`, `pack-errors.ts`) montado en `restaurants/:restaurantId/packs`, con el mismo esquema que `tables`. El formulario edita los huecos en orden (añadir, quitar, subir, bajar); cada hueco tiene nombre, categoría, restricción ("Todos menos los marcados" = `bloquear`, "Solo los marcados" = `permitir`) y una lista de casillas con los platos de esa categoría (los carga con `DishService.getAll()`). Enlace "Packs" (icono `layers`) en el submenú y en el panel del restaurante.
+- **`web-clientes`**: la carta pide `GET /public/restaurants/:id/packs` (`PackService`) y muestra una sección "Packs" encima de los platos. "Elegir" abre un desplegable por hueco con sus `options`; si un hueco solo tiene una opción se preselecciona. `CartStore` guarda los packs aparte de los platos (`packs()`, `addPack`, `updatePackQuantity`, `removePack`, `isEmpty`); dos packs iguales con distinta elección son líneas distintas. `confirmOrder()` envía `packs` en `POST /orders` y, si la API rechaza un pack (`PackNotFoundError`, `PackNotActiveError`, `InvalidPackSelectionError`), pide quitarlo y volver a elegirlo. El detalle del pedido agrupa los platos por `packLineId` (nombre y precio del pack, estado de cada plato) y los importes usan `orderItemsTotal()` (`core/models/order.model.ts`), que cuenta el precio del pack una vez.
+- **`web-empleados`**: sin cambios de flujo, porque cada plato del pack llega como un ítem normal con su categoría. Cocina, barra, salón y mesas muestran una etiqueta `.item-pack` con el nombre del pack junto al plato.
+
 ### `web-clientes`: el patrón Store casi no se usa
 
 En `web-clientes` el patrón Store **no es la norma**: el único store real es `CartStore`, y es puramente local (sin HTTP) — vacía el carrito si añades un plato de otro restaurante, pero no envuelve ninguna llamada a la API.
@@ -123,7 +129,7 @@ En `web-clientes` el patrón Store **no es la norma**: el único store real es `
 Para todo lo demás (restaurantes, carta/platos, confirmación y consulta de pedidos) los componentes de `features/` inyectan el `*Service` correspondiente directamente y llaman a sus métodos con `.subscribe({ next, error })`, sin pasar por ningún store ni por `firstValueFrom`:
 
 - `restaurant-list.component.ts` → `RestaurantService.getAll()`
-- `restaurant-menu.component.ts` → `RestaurantService.getById()` y `DishService.getByRestaurant()`
+- `restaurant-menu.component.ts` → `RestaurantService.getById()`, `DishService.getByRestaurant()` y `PackService.getByRestaurant()`
 - `cart.component.ts` (`confirmOrder()`) → `OrderService.createOrder()`
 - `my-orders.component.ts` → `OrderService.getMyOrders()`, con **polling cada 10 s** mediante `setInterval`/`clearInterval` en el propio componente
 - `order-detail.component.ts` → `OrderService.getOrderById()`, con **polling cada 5 s**, también con `setInterval`/`clearInterval` en el propio componente

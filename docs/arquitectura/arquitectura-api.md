@@ -51,7 +51,7 @@ contexts/employee/
 
 `contexts/shared/` no es un bounded context de negocio: contiene el value object `Email` y los middlewares y el `errorHandler` de Express.
 
-### 2. Por capas → `restaurant`, `dish`, `ingredient`, `order`, `table`
+### 2. Por capas → `restaurant`, `dish`, `ingredient`, `order`, `table`, `pack`
 
 El resto de dominios **no** usan bounded contexts. Se organizan en carpetas transversales por tipo de fichero:
 
@@ -66,7 +66,7 @@ src/
 
 Con un fichero por dominio en cada carpeta: `models/dish.model.ts`, `services/dish.service.ts`, `repositories/dish.repository.ts`, etc.
 
-**Diferencia clave**: aquí no hay entidades de dominio con comportamiento. `Restaurant`, `Dish`, `Ingredient`, `Order` y `Table` son `interface` planas; la validación vive en los servicios y en funciones sueltas del modelo.
+**Diferencia clave**: aquí no hay entidades de dominio con comportamiento. `Restaurant`, `Dish`, `Ingredient`, `Order`, `Table` y `Pack` son `interface` planas; la validación vive en los servicios y en funciones sueltas del modelo.
 
 ---
 
@@ -273,6 +273,7 @@ Todos cuelgan de `/api/v1`. La columna **Roles** indica qué valores de `req.use
 | `GET` | `/api/v1/public/restaurants` | Listado de restaurantes para la app de clientes |
 | `GET` | `/api/v1/public/restaurants/:id` | Detalle de restaurante |
 | `GET` | `/api/v1/public/restaurants/:restaurantId/dishes` | Carta pública del restaurante |
+| `GET` | `/api/v1/public/restaurants/:restaurantId/packs` | Packs activos del restaurante con las opciones de cada hueco |
 
 ### Restaurantes
 
@@ -333,6 +334,39 @@ El contrato completo (cuerpos, ejemplos y códigos de error) está en [`docs/api
 - No se borra una mesa `ocupada` (409 `TableOccupiedError`).
 - Ninguna acción libera una mesa automáticamente: solo el personal la pasa a `libre` con `PATCH /status` o `PUT`. La ocupación no se asocia a ningún cliente.
 
+### Packs
+
+La columna **Restaurante** indica si la ruta aplica `authorizeRestaurant()`.
+
+| Método | Ruta | Roles | Restaurante |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/restaurants/:restaurantId/packs` | admin, manager, camarero, cocinero | sí |
+| `GET` | `/api/v1/restaurants/:restaurantId/packs/:id` | admin, manager, camarero, cocinero | sí |
+| `POST` | `/api/v1/restaurants/:restaurantId/packs` | admin, manager | sí |
+| `PUT` | `/api/v1/restaurants/:restaurantId/packs/:id` | admin, manager | sí |
+| `DELETE` | `/api/v1/restaurants/:restaurantId/packs/:id` | admin, manager | sí |
+
+Cuerpo de `POST` y `PUT` (el `PUT` reemplaza el pack entero, huecos incluidos):
+
+```json
+{
+  "name": "Menú del día",
+  "description": "Entrante, principal y bebida",
+  "price": 20,
+  "active": true,
+  "slots": [
+    { "name": "Entrante", "category": "entrante" },
+    { "name": "Principal", "category": "principal" },
+    { "name": "Bebida", "category": "bebida", "restriction": "bloquear", "dishIds": ["<id de la cerveza>"] }
+  ]
+}
+```
+
+- `PackService` valida: nombre obligatorio (`PackNameRequiredError`), `price > 0` (`InvalidPriceError`), al menos un hueco (`PackSlotsRequiredError`), categoría válida (`InvalidCategoryError`) y `restriction` en `bloquear | permitir` (`InvalidPackRestrictionError`, default `bloquear`). Los `dishIds` de un hueco deben ser platos del restaurante de esa categoría, y un hueco `permitir` necesita al menos uno (`InvalidPackSlotDishError`). Todos dan 400.
+- Un pack se busca siempre por `id` **y** `restaurantId`: el de otro restaurante da 404 `PackNotFoundError`.
+- Los ids de los huecos se regeneran en cada `PUT`.
+- La ruta pública solo devuelve packs `active` y, en cada hueco, `options` con los platos que se pueden elegir (`id`, `name`, `description`, `price`): de su categoría, disponibles y no excluidos por la lista. Un pack con algún hueco sin opciones no aparece.
+
 ### Pedidos
 
 | Método | Ruta | Roles |
@@ -350,6 +384,24 @@ Ninguna ruta de pedidos aplica `authorize()`: cualquier usuario autenticado pued
 Si el pedido trae `tableId`, la mesa debe pertenecer a `restaurantId` y estar `ocupada`. Si no existe o es de otro restaurante, responde 400 `TableNotFoundError`; si está `libre` o `reservada`, 400 `TableNotAvailableError`. `GET /orders/active`, `/orders/mine`, `/orders/:id` y la respuesta 201 de `POST /orders` incluyen `tableNumber` (`LEFT JOIN tables`), que es `null` si el pedido no tiene mesa o si `tableId` no corresponde a ninguna mesa.
 
 Al crear un pedido, el servicio **expande las cantidades**: un ítem con `quantity: 3` se guarda como 3 filas de `order_items` con `quantity: 1` cada una, para poder seguir el estado de cada unidad por separado.
+
+**Packs en un pedido.** `POST /orders` acepta, además de `items`, un array opcional `packs`:
+
+```json
+{
+  "restaurantId": "rest-1",
+  "tableId": "rest-1-mesa-5",
+  "items": [],
+  "packs": [
+    { "packId": "rest-1-pack-menu-dia", "quantity": 1, "notes": null,
+      "selections": [{ "slotId": "<id del hueco>", "dishId": "<id del plato>" }] }
+  ]
+}
+```
+
+`OrderService` delega la validación en `PackService.resolveSelection()` (interfaz `PackSelectionResolver`, inyectada como tercer argumento opcional): el pack debe existir en el restaurante (`PackNotFoundError`) y estar activo (`PackNotActiveError`), y cada hueco necesita exactamente una elección permitida (`InvalidPackSelectionError`). Como `OrderController` tiene su propio `try/catch`, todos responden 400. Cada unidad de pack genera un `packLineId` y una fila de `order_items` por plato elegido, con `packId`, `packLineId`, `packName` y `packPrice` (copia del pack al pedir); en los platos sueltos esos campos son `null`. Cocina y barra siguen viendo platos normales con su categoría y su estado.
+
+El importe de un pedido se calcula con `calculateOrderItemsTotal(items)` (`models/order.model.ts`): suma `dishPrice × quantity` de los platos sueltos y `packPrice` una vez por cada `packLineId`.
 
 ---
 
@@ -371,8 +423,8 @@ Los tres responden directamente, sin pasar por el `errorHandler`. `authorizeRest
 
 Jerarquía: `Error` → `AppError` (abstracta) → errores específicos en `errors/DomainErrors.ts`. `AppError` asigna `this.name = this.constructor.name`, y el `errorHandler` decide el código HTTP a partir de ese nombre:
 
-- **404**: `EmployeeNotFoundError`, `RestaurantNotFoundError`, `IngredientNotFoundError`, `DishNotFoundError`, `TableNotFoundError`
-- **409** (`CONFLICT_ERRORS`): `DuplicatedTableNumberError`, `TableNotAvailableError`, `TableOccupiedError`
+- **404**: `EmployeeNotFoundError`, `RestaurantNotFoundError`, `IngredientNotFoundError`, `DishNotFoundError`, `TableNotFoundError`, `PackNotFoundError`
+- **409** (`CONFLICT_ERRORS`): `DuplicatedTableNumberError`, `TableNotAvailableError`, `TableOccupiedError`, `PackNotActiveError`
 - **401**: `InvalidCredentialsError`
 - **400**: cualquier otro `AppError`
 - **500**: errores no controlados
@@ -410,7 +462,7 @@ Los imports llevan extensión `.js` (`import { dbConfig } from '@config/database
 
 La clase `Database` (`config/database.ts`) encapsula `sqlite3` con una API basada en promesas:
 
-- `initialize()`: abre la conexión y ejecuta `runInitialMigrations()` (`CREATE TABLE IF NOT EXISTS`)
+- `initialize()`: abre la conexión y ejecuta `runInitialMigrations()` (`CREATE TABLE IF NOT EXISTS` y, para columnas nuevas en tablas existentes, `addColumnIfMissing()`, que solo hace `ALTER TABLE ... ADD COLUMN` si la columna falta)
 - `run()`: INSERT/UPDATE/DELETE
 - `all<T>()`: SELECT de múltiples filas
 - `get<T>()`: SELECT de una fila
@@ -428,7 +480,8 @@ La ruta del fichero se decide en el constructor: `:memory:` si `NODE_ENV=test`, 
 Con **Vitest** (`npm test` desde la raíz, o `npm run test:watch` dentro de `packages/api`). Los tests son unitarios y conviven con el código que prueban:
 
 - Dominio y casos de uso de `employee`, con dobles en `contexts/employee/application/mocks/`
-- Servicios y repositorios de `restaurant`, `ingredient`, `order` y `table`, con dobles en `repositories/mocks/`
+- Servicios y repositorios de `restaurant`, `ingredient`, `order`, `table` y `pack`, con dobles en `repositories/mocks/` (incluidos `MockDishRepository` y `MockPackRepository`)
+- Funciones puras de los modelos (`pack.model.test.ts`, `order.model.packs.test.ts` para `calculateOrderItemsTotal`)
 - Middlewares y `errorHandler`, llamándolos directamente con `req`/`res` simulados
 
 **No hay tests de integración HTTP.** `supertest` figura como dependencia de desarrollo pero no se usa en ningún test, así que las rutas no están cubiertas.

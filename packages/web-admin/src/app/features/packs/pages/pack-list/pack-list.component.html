@@ -1,0 +1,61 @@
+<div class="fade-in">
+  <div class="page-header">
+    <h1>Packs</h1>
+    <a [routerLink]="['new']" class="btn btn-primary">
+      <lucide-icon name="plus" [size]="16"></lucide-icon>
+      Nuevo pack
+    </a>
+  </div>
+
+  @if (store.loading()) {
+    <div class="spinner"></div>
+  } @else if (store.error()) {
+    <div class="alert-error">{{ store.error() }}</div>
+  } @else if (store.packs().length === 0) {
+    <div class="empty-state card">
+      <lucide-icon name="layers" [size]="40"></lucide-icon>
+      <p>No hay packs para este restaurante</p>
+    </div>
+  } @else {
+    <div class="card table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Incluye</th>
+            <th>Precio</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of store.packs(); track p.id) {
+            <tr>
+              <td>
+                <span class="pack-name">{{ p.name }}</span>
+                @if (p.description) {
+                  <span class="pack-description">{{ p.description }}</span>
+                }
+              </td>
+              <td>{{ slotSummary(p) }}</td>
+              <td class="price">{{ formatPrice(p.price) }}</td>
+              <td>
+                <span class="badge" [class.badge-muted]="!p.active">{{ p.active ? 'Activo' : 'Inactivo' }}</span>
+              </td>
+              <td>
+                <div class="actions">
+                  <a [routerLink]="[p.id, 'edit']" class="btn btn-secondary btn-sm" title="Editar">
+                    <lucide-icon name="edit" [size]="14"></lucide-icon>
+                  </a>
+                  <button class="btn btn-danger btn-sm" title="Eliminar" (click)="onDelete(p.id)">
+                    <lucide-icon name="trash-2" [size]="14"></lucide-icon>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

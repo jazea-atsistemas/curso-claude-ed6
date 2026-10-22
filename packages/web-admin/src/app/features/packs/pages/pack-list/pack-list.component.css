@@ -1,0 +1,17 @@
+.pack-name {
+  display: block;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.pack-description {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.price {
+  font-weight: 600;
+  color: var(--green-light);
+}
