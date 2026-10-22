@@ -168,3 +168,45 @@ export class InvalidTableStatusError extends AppError {
     super(message ?? 'Invalid table status')
   }
 }
+
+export class TableNotFoundError extends AppError {
+  constructor() {
+    super('Table not found')
+  }
+}
+
+export class TableNumberRequiredError extends AppError {
+  constructor() {
+    super('Table number is required and must be an integer >= 1')
+  }
+}
+
+export class InvalidCapacityError extends AppError {
+  constructor() {
+    super('Capacity must be an integer >= 1')
+  }
+}
+
+export class DuplicatedTableNumberError extends AppError {
+  constructor(number: number) {
+    super(`Table number ${number} already exists in this restaurant`)
+  }
+}
+
+export class TableNotAvailableError extends AppError {
+  constructor() {
+    super('Table is not available')
+  }
+}
+
+export class TableOccupiedError extends AppError {
+  constructor() {
+    super('Cannot delete an occupied table')
+  }
+}
+
+export class InvalidPeopleCountError extends AppError {
+  constructor() {
+    super('People count must be an integer >= 1')
+  }
+}
