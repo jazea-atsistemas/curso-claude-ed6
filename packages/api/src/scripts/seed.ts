@@ -4,6 +4,32 @@ import { BcryptAuthService } from '@employee/infrastructure/BcryptAuthService.js
 import { SqliteEmployeeRepository } from '@employee/infrastructure/SqliteEmployeeRepository.js'
 import { Employee } from '@employee/domain/Employee.js'
 
+// Orden hijo -> padre para no violar las foreign keys al borrar.
+const TABLES_TO_CLEAR = [
+    'order_items',
+    'orders',
+    'dish_ingredients',
+    'dishes',
+    'ingredients',
+    'tables',
+    'employees',
+    'restaurants',
+]
+
+// Vacía todas las tablas (sin tocar el esquema) para que el seed parta siempre de una BD limpia.
+const clearDatabase = async () => {
+    await dbConfig.run('BEGIN TRANSACTION')
+    try {
+        for (const table of TABLES_TO_CLEAR) {
+            await dbConfig.run(`DELETE FROM ${table}`)
+        }
+        await dbConfig.run('COMMIT')
+    } catch (error) {
+        await dbConfig.run('ROLLBACK')
+        throw error
+    }
+}
+
 const seed = async () => {
     try {
         await dbConfig.initialize()
@@ -12,22 +38,32 @@ const seed = async () => {
         const authService = new BcryptAuthService()
         const employeeRepo = new SqliteEmployeeRepository(dbConfig)
 
-        const admin = await employeeRepo.findByEmail('admin@resttek.com')
-        if (!admin) {
-            const adminEmployee = Employee.create({
-                id: randomUUID(),
-                firstName: 'Admin',
-                lastName: 'RestTek',
-                email: 'admin@resttek.com',
-                passwordHash: await authService.hashPassword('admin@resttek.com'),
-                role: 'admin',
-                restaurantId: null
-            })
-            await employeeRepo.save(adminEmployee)
-            console.log('Admin created: admin@resttek.com / admin@resttek.com')
-        } else {
-            console.log('Admin already exists.')
-        }
+        await clearDatabase()
+        console.log('Existing data deleted.')
+
+        await dbConfig.run(`
+            INSERT OR IGNORE INTO restaurants (id, name, address, email, phone, owner_first_name, owner_last_name, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, ['rest-1', 'Restaurante El Gourmet', 'Calle Mayor 10, Madrid', 'info@gourmet.com', '912345678', 'Carlos', 'García', new Date().toISOString(), new Date().toISOString()])
+
+        await dbConfig.run(`
+            INSERT OR IGNORE INTO restaurants (id, name, address, email, phone, owner_first_name, owner_last_name, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, ['rest-2', 'Pizzería Napoli', 'Avenida del Sol 25, Barcelona', 'info@napoli.com', '934567890', 'Marco', 'Rossi', new Date().toISOString(), new Date().toISOString()])
+
+        console.log('Restaurants created.')
+
+        const adminEmployee = Employee.create({
+            id: randomUUID(),
+            firstName: 'Admin',
+            lastName: 'RestTek',
+            email: 'admin@resttek.com',
+            passwordHash: await authService.hashPassword('admin@resttek.com'),
+            role: 'admin',
+            restaurantId: null
+        })
+        await employeeRepo.save(adminEmployee)
+        console.log('Admin created: admin@resttek.com / admin@resttek.com')
 
         const employees = [
             { firstName: 'Juan', lastName: 'García', email: 'cocinero1@resttek.com', role: 'cocinero', restaurantId: 'rest-1' },
@@ -42,36 +78,19 @@ const seed = async () => {
         ]
 
         for (const emp of employees) {
-            if (!await employeeRepo.findByEmail(emp.email)) {
-                const employee = Employee.create({
-                    id: randomUUID(),
-                    firstName: emp.firstName,
-                    lastName: emp.lastName,
-                    email: emp.email,
-                    passwordHash: await authService.hashPassword(emp.email),
-                    role: emp.role,
-                    restaurantId: emp.restaurantId
-                })
-                await employeeRepo.save(employee)
-                console.log(`${emp.role} created: ${emp.email} / ${emp.email}`)
-            } else {
-                console.log(`${emp.role} already exists: ${emp.email}`)
-            }
+            const employee = Employee.create({
+                id: randomUUID(),
+                firstName: emp.firstName,
+                lastName: emp.lastName,
+                email: emp.email,
+                passwordHash: await authService.hashPassword(emp.email),
+                role: emp.role,
+                restaurantId: emp.restaurantId
+            })
+            await employeeRepo.save(employee)
+            console.log(`${emp.role} created: ${emp.email} / ${emp.email}`)
         }
 
-        await dbConfig.run(`
-            INSERT OR IGNORE INTO restaurants (id, name, address, email, phone, owner_first_name, owner_last_name, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, ['rest-1', 'Restaurante El Gourmet', 'Calle Mayor 10, Madrid', 'info@gourmet.com', '912345678', 'Carlos', 'García', new Date().toISOString(), new Date().toISOString()])
-
-        await dbConfig.run(`
-            INSERT OR IGNORE INTO restaurants (id, name, address, email, phone, owner_first_name, owner_last_name, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, ['rest-2', 'Pizzería Napoli', 'Avenida del Sol 25, Barcelona', 'info@napoli.com', '934567890', 'Marco', 'Rossi', new Date().toISOString(), new Date().toISOString()])
-
-        console.log('Restaurants created.')
-
-        // IDs fijos e INSERT OR IGNORE: re-ejecutar el seed no duplica mesas
         const tables = [
             { id: 'rest-1-mesa-1', restaurantId: 'rest-1', number: 1, description: 'Junto a la entrada', capacity: 2, status: 'libre' },
             { id: 'rest-1-mesa-2', restaurantId: 'rest-1', number: 2, description: 'Junto a la barra', capacity: 2, status: 'libre' },
