@@ -6,6 +6,8 @@ import { Employee } from '@employee/domain/Employee.js'
 
 // Orden hijo -> padre para no violar las foreign keys al borrar.
 const TABLES_TO_CLEAR = [
+    'client_points',
+    'points_rules',
     'order_items',
     'orders',
     'dish_ingredients',
@@ -52,6 +54,20 @@ const seed = async () => {
         `, ['rest-2', 'Pizzería Napoli', 'Avenida del Sol 25, Barcelona', 'info@napoli.com', '934567890', 'Marco', 'Rossi', new Date().toISOString(), new Date().toISOString()])
 
         console.log('Restaurants created.')
+
+        // Regla de puntos: por cada spend_amount € gastados, points_awarded puntos
+        const pointsRules = [
+            { restaurantId: 'rest-1', spendAmount: 10, pointsAwarded: 1 },
+            { restaurantId: 'rest-2', spendAmount: 5, pointsAwarded: 1 }
+        ]
+        for (const rule of pointsRules) {
+            await dbConfig.run(`
+                INSERT OR IGNORE INTO points_rules (restaurant_id, spend_amount, points_awarded, updated_at)
+                VALUES (?, ?, ?, ?)
+            `, [rule.restaurantId, rule.spendAmount, rule.pointsAwarded, new Date().toISOString()])
+        }
+
+        console.log('Points rules created: rest-1 (10 € → 1 punto), rest-2 (5 € → 1 punto)')
 
         const adminEmployee = Employee.create({
             id: randomUUID(),
