@@ -15,7 +15,10 @@ export class EmployeeStore {
   readonly loading = this._loading.asReadonly()
   readonly error = this._error.asReadonly()
 
+  private _currentRestaurantId: string | null = null
+
   async loadAll(): Promise<void> {
+    this._currentRestaurantId = null
     this._loading.set(true)
     this._error.set(null)
     try {
@@ -29,15 +32,25 @@ export class EmployeeStore {
   }
 
   async loadByRestaurant(restaurantId: string): Promise<void> {
+    // El store es global: al cambiar de restaurante se vacía la lista para no mostrar datos del anterior
+    if (this._currentRestaurantId !== restaurantId) {
+      this._employees.set([])
+    }
+    this._currentRestaurantId = restaurantId
     this._loading.set(true)
     this._error.set(null)
     try {
       const data = await firstValueFrom(this.service.getByRestaurant(restaurantId))
+      // Si mientras tanto se ha pedido otro restaurante, se descarta esta respuesta
+      if (this._currentRestaurantId !== restaurantId) return
       this._employees.set(data)
     } catch {
+      if (this._currentRestaurantId !== restaurantId) return
       this._error.set('No se pudieron cargar los empleados.')
     } finally {
-      this._loading.set(false)
+      if (this._currentRestaurantId === restaurantId) {
+        this._loading.set(false)
+      }
     }
   }
 

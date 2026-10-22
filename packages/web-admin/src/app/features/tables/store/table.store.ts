@@ -15,13 +15,23 @@ export class TableStore {
   readonly loading = this._loading.asReadonly()
   readonly error = this._error.asReadonly()
 
+  private _currentRestaurantId: string | null = null
+
   async loadByRestaurant(restaurantId: string): Promise<void> {
+    // El store es global: al cambiar de restaurante se vacía la lista para no mostrar datos del anterior
+    if (this._currentRestaurantId !== restaurantId) {
+      this._tables.set([])
+    }
+    this._currentRestaurantId = restaurantId
     this._loading.set(true)
     this._error.set(null)
     try {
       const data = await firstValueFrom(this.service.getAll(restaurantId))
+      // Si mientras tanto se ha pedido otro restaurante, se descarta esta respuesta
+      if (this._currentRestaurantId !== restaurantId) return
       this._tables.set(data)
     } catch (err: any) {
+      if (this._currentRestaurantId !== restaurantId) return
       this._tables.set([])
       this._error.set(
         err?.status === 403
@@ -29,7 +39,9 @@ export class TableStore {
           : 'No se pudieron cargar las mesas.'
       )
     } finally {
-      this._loading.set(false)
+      if (this._currentRestaurantId === restaurantId) {
+        this._loading.set(false)
+      }
     }
   }
 
