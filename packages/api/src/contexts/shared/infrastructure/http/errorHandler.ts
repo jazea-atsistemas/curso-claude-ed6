@@ -6,13 +6,15 @@ const NOT_FOUND_ERRORS = [
     'RestaurantNotFoundError',
     'IngredientNotFoundError',
     'DishNotFoundError',
-    'TableNotFoundError'
+    'TableNotFoundError',
+    'OrderNotFoundError'
 ]
 
 const CONFLICT_ERRORS = [
     'DuplicatedTableNumberError',
     'TableNotAvailableError',
-    'TableOccupiedError'
+    'TableOccupiedError',
+    'OrderAlreadyBilledError'
 ]
 
 const UNAUTHORIZED_ERRORS = [

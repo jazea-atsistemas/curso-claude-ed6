@@ -18,6 +18,9 @@ erDiagram
     ingredients ||--o{ dish_ingredients : "usado en"
     orders ||--o{ order_items : "contiene"
     dishes ||--o{ order_items : "pedido como"
+    restaurants ||--o| points_rules : "configura"
+    restaurants ||--o{ client_points : "acumula"
+    employees ||--o{ client_points : "tiene saldo"
 
     restaurants {
         TEXT id PK
@@ -87,6 +90,23 @@ erDiagram
         TEXT table_id
         TEXT client_id
         TEXT created_at
+        REAL total
+        INTEGER points_earned
+        TEXT billed_at
+    }
+
+    points_rules {
+        TEXT restaurant_id PK_FK
+        REAL spend_amount
+        INTEGER points_awarded
+        TEXT updated_at
+    }
+
+    client_points {
+        TEXT client_id PK_FK
+        TEXT restaurant_id PK_FK
+        INTEGER balance
+        TEXT updated_at
     }
 
     order_items {
@@ -228,6 +248,11 @@ Pedidos de los clientes.
 | `table_id` | TEXT | Sí | ID de la mesa (`tables.id`, opcional). **Sin FK**: la integridad la valida `OrderService` al crear el pedido |
 | `client_id` | TEXT | Sí | ID del cliente (opcional) |
 | `created_at` | TEXT | No | Fecha de creación |
+| `total` | REAL | Sí | Importe cobrado en euros. Se rellena al pedir la cuenta |
+| `points_earned` | INTEGER | Sí | Puntos que ganó el cliente con este pedido. Se rellena al pedir la cuenta |
+| `billed_at` | TEXT | Sí | Fecha en que se pidió la cuenta. `null` = pedido sin cobrar; solo se puede pedir una vez |
+
+`total`, `points_earned` y `billed_at` se añadieron después de crear la tabla: `runInitialMigrations()` las añade con `ALTER TABLE ... ADD COLUMN` si faltan, así que una base de datos existente no hay que recrearla.
 
 ---
 
@@ -250,6 +275,36 @@ Líneas de pedido. Cada ítem es un plato con cantidad y estado.
 
 ---
 
+### `points_rules`
+
+Regla de puntos de cada restaurante: por cada `spend_amount` € gastados el cliente gana `points_awarded` puntos. Un restaurante sin fila no da puntos.
+
+| Columna | Tipo | Nullable | Descripción |
+| --- | --- | --- | --- |
+| `restaurant_id` | TEXT | No | PK y FK → `restaurants.id` (una regla por restaurante) |
+| `spend_amount` | REAL | No | Euros por tramo (X), ≥ 0,01 |
+| `points_awarded` | INTEGER | No | Puntos por tramo (Y), ≥ 1 |
+| `updated_at` | TEXT | No | Fecha de última modificación |
+
+---
+
+### `client_points`
+
+Saldo de puntos de cada cliente en cada restaurante. La fila se crea la primera vez que el cliente gana puntos en ese restaurante.
+
+| Columna | Tipo | Nullable | Descripción |
+| --- | --- | --- | --- |
+| `client_id` | TEXT | No | FK → `employees.id` (un cliente es un `employee` con rol `cliente`) |
+| `restaurant_id` | TEXT | No | FK → `restaurants.id` |
+| `balance` | INTEGER | No | Puntos disponibles (default: 0) |
+| `updated_at` | TEXT | No | Fecha del último movimiento |
+
+**Restricciones:**
+
+- PK compuesta: (`client_id`, `restaurant_id`). Los puntos de un restaurante no valen en otro.
+
+---
+
 ## Relaciones
 
 | Relación | Tipo | Descripción |
@@ -263,15 +318,18 @@ Líneas de pedido. Cada ítem es un plato con cantidad y estado.
 | Dish ↔ Ingredient | N:M | Un plato usa varios ingredientes (via `dish_ingredients`) |
 | Order → OrderItems | 1:N | Un pedido tiene varios ítems |
 | Dish → OrderItems | 1:N | Un plato puede estar en varios ítems de pedido |
+| Restaurant → PointsRule | 1:0..1 | Un restaurante tiene como mucho una regla de puntos |
+| Employee (cliente) ↔ Restaurant | N:M | Saldo de puntos por cliente y restaurante (via `client_points`) |
 
 ---
 
 ## Notas Técnicas
 
 - **IDs**: Todos son UUID v4 generados con `crypto.randomUUID()`. Excepción: el script de seed usa los identificadores fijos `rest-1` y `rest-2` para los restaurantes de prueba, y `rest-1-mesa-1`…`rest-1-mesa-6` y `rest-2-mesa-1`…`rest-2-mesa-4` para sus mesas.
+- **Seed de puntos**: el seed crea una regla para cada restaurante de prueba (`rest-1`: 10 € → 1 punto; `rest-2`: 5 € → 1 punto) y ningún saldo. `TABLES_TO_CLEAR` vacía `client_points` y `points_rules` antes que sus tablas padre.
 - **Fechas**: Almacenadas como TEXT en formato ISO 8601 (`new Date().toISOString()`).
 - **Booleanos**: SQLite no tiene tipo BOOLEAN; se usa INTEGER (0 = false, 1 = true).
 - **Nomenclatura**: las columnas son `snake_case` y las propiedades TypeScript `camelCase`. La conversión se hace con alias en el propio SQL (`owner_first_name as ownerFirstName`).
 - **Migraciones**: Las tablas se crean automáticamente en `Database.initialize()` con `CREATE TABLE IF NOT EXISTS`.
-- **Sin migrations framework**: No se usa un sistema de migraciones formal. Los cambios de esquema se hacen modificando `runInitialMigrations()`. Como solo se ejecuta `CREATE TABLE IF NOT EXISTS`, **añadir una columna no afecta a una base de datos ya creada**: hay que borrar `packages/api/resttek.db` y volver a sembrar. Una tabla nueva (como `tables`) sí se crea al arrancar sobre una base de datos existente.
+- **Sin migrations framework**: No se usa un sistema de migraciones formal. Los cambios de esquema se hacen modificando `runInitialMigrations()`. `CREATE TABLE IF NOT EXISTS` **no modifica una tabla ya creada**: para añadir una columna a una tabla existente hay que añadirla también con `addColumnIfMissing(tabla, columna, tipo)` al final de `runInitialMigrations()` (comprueba `PRAGMA table_info` y hace `ALTER TABLE ... ADD COLUMN` solo si falta), como con `orders.total`. Una tabla nueva (como `tables` o `points_rules`) sí se crea al arrancar sobre una base de datos existente.
 - **`orders.table_id` sin FK**: SQLite no permite añadir una FK con `ALTER TABLE`, y `CREATE TABLE IF NOT EXISTS` no modifica tablas existentes. Los pedidos antiguos con un `table_id` que no es una mesa (p. ej. `'5'`) devuelven `tableNumber: null`.

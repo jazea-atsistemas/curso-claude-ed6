@@ -43,6 +43,10 @@ export const routes: Routes = [
           {
             path: 'employees',
             loadChildren: () => import('./features/employees/employees.routes').then(m => m.EMPLOYEE_ROUTES)
+          },
+          {
+            path: 'points',
+            loadComponent: () => import('./features/points/pages/points-rule/points-rule.component').then(m => m.PointsRuleComponent)
           }
         ]
       }

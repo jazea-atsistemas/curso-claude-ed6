@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core'
 import { HttpClient } from '@angular/common/http'
 import { Observable } from 'rxjs'
 import { API_URL } from '@resttek/web-shared'
-import { Order } from '../models/order.model'
+import { Order, OrderBill } from '../models/order.model'
 
 @Injectable({ providedIn: 'root' })
 export class OrderService {
@@ -23,5 +23,9 @@ export class OrderService {
 
   getOrderById(id: string): Observable<Order> {
     return this.http.get<Order>(`${this.apiUrl}/orders/${id}`)
+  }
+
+  requestBill(id: string): Observable<OrderBill> {
+    return this.http.post<OrderBill>(`${this.apiUrl}/orders/${id}/bill`, {})
   }
 }

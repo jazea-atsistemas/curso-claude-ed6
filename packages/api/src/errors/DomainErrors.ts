@@ -210,3 +210,15 @@ export class InvalidPeopleCountError extends AppError {
     super('People count must be an integer >= 1')
   }
 }
+
+export class OrderAlreadyBilledError extends AppError {
+  constructor() {
+    super('The bill for this order has already been requested')
+  }
+}
+
+export class InvalidPointsRuleError extends AppError {
+  constructor(message?: string) {
+    super(message ?? 'Invalid points rule')
+  }
+}

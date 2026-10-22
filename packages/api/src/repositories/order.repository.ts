@@ -9,6 +9,9 @@ interface OrderRow {
     client_id: string | null
     created_at: string
     table_number: number | null
+    total: number | null
+    points_earned: number | null
+    billed_at: string | null
 }
 
 interface OrderRowWithRestaurant extends OrderRow {
@@ -31,12 +34,28 @@ interface OrderItemWithDishRow extends OrderItemRow {
     dish_category: string
 }
 
+function billingFields(row: OrderRow): Pick<Order, 'total' | 'pointsEarned' | 'billedAt'> {
+    return {
+        total: row.total ?? null,
+        pointsEarned: row.points_earned ?? null,
+        billedAt: row.billed_at ? new Date(row.billed_at) : null
+    }
+}
+
 export interface OrderRepository {
     create(order: Order): Promise<void>
     findById(id: string): Promise<Order | null>
     updateItemStatus(orderId: string, itemId: string, status: string): Promise<void>
     findActiveByRestaurant(restaurantId: string): Promise<Order[]>
     findByClientId(clientId: string): Promise<Order[]>
+    // Guarda la cuenta solo si el pedido no estaba ya cobrado. Devuelve false si ya lo estaba.
+    markAsBilled(orderId: string, bill: BillData): Promise<boolean>
+}
+
+export interface BillData {
+    total: number
+    pointsEarned: number
+    billedAt: Date
 }
 
 export class SqliteOrderRepository implements OrderRepository {
@@ -77,6 +96,7 @@ export class SqliteOrderRepository implements OrderRepository {
             clientId: orderRow.client_id,
             createdAt: new Date(orderRow.created_at),
             items,
+            ...billingFields(orderRow),
             restaurantName: orderRow.restaurant_name,
             restaurantLogoUrl: orderRow.restaurant_logo_url
         }
@@ -110,7 +130,8 @@ export class SqliteOrderRepository implements OrderRepository {
                 tableNumber: row.table_number ?? null,
                 clientId: row.client_id,
                 createdAt: new Date(row.created_at),
-                items
+                items,
+                ...billingFields(row)
             })
         }
 
@@ -139,12 +160,21 @@ export class SqliteOrderRepository implements OrderRepository {
                 clientId: row.client_id,
                 createdAt: new Date(row.created_at),
                 items,
+                ...billingFields(row),
                 restaurantName: row.restaurant_name,
                 restaurantLogoUrl: row.restaurant_logo_url
             })
         }
 
         return orders
+    }
+
+    async markAsBilled(orderId: string, bill: BillData): Promise<boolean> {
+        const result = await this.db.run(
+            'UPDATE orders SET total = ?, points_earned = ?, billed_at = ? WHERE id = ? AND billed_at IS NULL',
+            [bill.total, bill.pointsEarned, bill.billedAt.toISOString(), orderId]
+        )
+        return result.changes > 0
     }
 
     private async getOrderItems(orderId: string): Promise<OrderItem[]> {

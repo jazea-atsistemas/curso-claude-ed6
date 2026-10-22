@@ -26,6 +26,10 @@ import { CartStore } from '../store/cart.store'
             <lucide-icon name="clipboard-list" [size]="18"></lucide-icon>
             Mis Pedidos
           </a>
+          <a routerLink="/points" routerLinkActive="active" class="nav-link">
+            <lucide-icon name="star" [size]="18"></lucide-icon>
+            Mis Puntos
+          </a>
         </nav>
         <div class="header-right">
           <a routerLink="/cart" class="cart-btn" routerLinkActive="active">
