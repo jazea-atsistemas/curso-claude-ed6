@@ -61,9 +61,34 @@ import { Order, OrderItem } from '../../core/models/order.model'
 
           <div class="ticket-total">
             <span>Total</span>
-            <strong>{{ getTotal() | number:'1.2-2' }} €</strong>
+            <strong>{{ (order()!.total ?? getTotal()) | number:'1.2-2' }} €</strong>
           </div>
+
+          @if (order()!.billedAt) {
+            <div class="ticket-divider"></div>
+            <div class="bill-summary">
+              <p class="bill-title">Cuenta pedida · {{ order()!.billedAt | date:'dd/MM/yyyy HH:mm' }}</p>
+              <p class="bill-points">
+                <lucide-icon name="star" [size]="16"></lucide-icon>
+                Has ganado {{ order()!.pointsEarned ?? 0 }} {{ order()!.pointsEarned === 1 ? 'punto' : 'puntos' }}
+              </p>
+              @if (pointsBalance() !== null) {
+                <p class="bill-balance">Saldo en este restaurante: {{ pointsBalance() }} puntos</p>
+              }
+              <a routerLink="/points" class="bill-link">Ver mis puntos</a>
+            </div>
+          }
         </div>
+
+        @if (!order()!.billedAt) {
+          @if (billError()) {
+            <div class="alert-error bill-error">{{ billError() }}</div>
+          }
+          <button class="btn btn-primary bill-btn" (click)="requestBill()" [disabled]="billing()">
+            <lucide-icon name="receipt" [size]="18"></lucide-icon>
+            {{ billing() ? 'Pidiendo la cuenta...' : 'Pedir la cuenta' }}
+          </button>
+        }
       }
     </div>
   `,
@@ -171,6 +196,41 @@ import { Order, OrderItem } from '../../core/models/order.model'
       font-size: 18px;
       font-weight: 700;
     }
+    .bill-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+    }
+    .bill-title {
+      color: var(--text-muted);
+    }
+    .bill-points {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--green-light);
+      font-weight: 600;
+    }
+    .bill-balance {
+      color: var(--text-secondary);
+    }
+    .bill-link {
+      color: var(--green-light);
+      font-size: 13px;
+    }
+    .bill-btn {
+      width: 100%;
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .bill-error {
+      margin-top: 16px;
+    }
   `]
 })
 export class OrderDetailComponent implements OnInit, OnDestroy {
@@ -181,6 +241,10 @@ export class OrderDetailComponent implements OnInit, OnDestroy {
   readonly order = signal<Order | null>(null)
   readonly loading = signal(true)
   readonly error = signal<string | null>(null)
+  readonly billing = signal(false)
+  readonly billError = signal<string | null>(null)
+  // Saldo devuelto al pedir la cuenta (solo se conoce en esta visita)
+  readonly pointsBalance = signal<number | null>(null)
 
   ngOnInit(): void {
     const orderId = this.route.snapshot.paramMap.get('id')!
@@ -204,6 +268,25 @@ export class OrderDetailComponent implements OnInit, OnDestroy {
       error: () => {
         this.error.set('Error al cargar el pedido')
         this.loading.set(false)
+      }
+    })
+  }
+
+  requestBill(): void {
+    const current = this.order()
+    if (!current || this.billing()) return
+    this.billing.set(true)
+    this.billError.set(null)
+    this.orderService.requestBill(current.id).subscribe({
+      next: (bill) => {
+        this.order.set({ ...current, total: bill.total, pointsEarned: bill.pointsEarned, billedAt: bill.billedAt })
+        this.pointsBalance.set(bill.pointsBalance)
+        this.billing.set(false)
+      },
+      error: (err) => {
+        this.billError.set(err?.status === 409 ? 'La cuenta de este pedido ya se había pedido' : 'No se ha podido pedir la cuenta')
+        this.billing.set(false)
+        if (err?.status === 409) this.loadOrder(current.id, false)
       }
     })
   }
