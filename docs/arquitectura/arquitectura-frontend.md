@@ -52,15 +52,16 @@ src/app/
 ├── app.routes.ts
 ├── core/
 │   ├── layout/            → shell.component.ts
-│   ├── models/            → dish, order, restaurant
-│   ├── services/          → dish, order, restaurant
+│   ├── models/            → dish, order, restaurant, table
+│   ├── services/          → dish, order, restaurant, table
 │   └── store/             → cart.store.ts
 └── features/
     ├── cart/cart.component.ts
     ├── menu/restaurant-menu.component.ts
     ├── orders/my-orders.component.ts
     ├── orders/order-detail.component.ts
-    └── restaurants/restaurant-list.component.ts
+    ├── restaurants/restaurant-list.component.ts
+    └── tables/table-select.component.ts
 ```
 
 Ninguna de las tres aplicaciones tiene carpeta `shared/` propia: lo compartido vive en `@resttek/web-shared`.
@@ -107,6 +108,13 @@ export class DishStore {
 Caso particular en `web-empleados`:
 
 - `OrderStore` añade **polling cada 30 s** con `startPolling()` / `stopPolling()`, ya que la API no tiene websockets.
+- `TableStore` (`features/tables`) hace lo mismo con `GET /restaurants/:restaurantId/tables` y actualiza la mesa en sitio tras `PATCH .../status`.
+
+### Gestión de mesas
+
+- **`web-admin`**: feature `features/tables` (`table-list`, `table-form`, `tables.routes.ts`) montado en `restaurants/:restaurantId/tables`, calcado de `ingredients`. Lo usan el `admin` (cualquier restaurante) y el `manager` (solo el suyo; la API devuelve 403 en otro). `table-errors.ts` traduce el campo `error` de la API (`DuplicatedTableNumberError`, `TableOccupiedError`…) y el 403 a mensajes en español. Enlace "Mesas" en el submenú del restaurante y en el panel.
+- **`web-empleados`**: página `/mesas` (camarero, manager y cocinero). Muestra cada mesa con su estado y, para las ocupadas, los ítems no `entregado` de sus pedidos activos (cruza `OrderStore.orders()` por `tableId`; `GET /orders/active` devuelve también los ítems entregados). Solo camarero y manager ven los botones de cambio de estado. Cocina, barra y salón muestran `Mesa {tableNumber}`.
+- **`web-clientes`**: tras elegir restaurante se va a `restaurants/:id/mesa` (`TableSelectComponent`): nº de personas → `GET /available` → "Continuar" llama a `POST /{id}/occupy` (un 409 recarga la lista con "Esa mesa acaba de ocuparse"). `CartStore` guarda la mesa en `sessionStorage` (`resttek.table`, siempre en `try/catch`). La carta redirige a `/mesa` si no hay mesa para ese restaurante, y `/mesa` redirige a la carta si ya la hay. El pedido envía `tableId`; un 400 `TableNotAvailableError`/`TableNotFoundError` limpia la mesa y vuelve a la selección. Las mesas solo las libera el personal.
 
 ### `web-clientes`: el patrón Store casi no se usa
 
@@ -319,7 +327,8 @@ El acceso por rol se controla en dos niveles. Las rutas están protegidas con el
 ```tsx
 { path: 'cocina', canActivate: [roleGuard('cocinero', 'manager')], loadComponent: ... },
 { path: 'barra',  canActivate: [roleGuard('camarero', 'manager')], loadComponent: ... },
-{ path: 'salon',  canActivate: [roleGuard('camarero', 'manager')], loadComponent: ... }
+{ path: 'salon',  canActivate: [roleGuard('camarero', 'manager')], loadComponent: ... },
+{ path: 'mesas',  canActivate: [roleGuard('camarero', 'manager', 'cocinero')], loadComponent: ... }
 ```
 
 Además, el `ShellComponent` decide con `computed()` qué enlaces se pintan en el menú:
