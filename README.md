@@ -73,6 +73,20 @@ curl http://localhost:3000/health
 # → {"status":"ok"}
 ```
 
+### Documentación de la API (OpenAPI)
+
+La especificación OpenAPI 3.1 se mantiene a mano en [`packages/api/openapi.yaml`](./packages/api/openapi.yaml). Con la API arrancada:
+
+- **Swagger UI**: http://localhost:3000/api/docs (permite probar las rutas; pulsa *Authorize* y pega el token de `POST /api/v1/auth/login`)
+- **Especificación en bruto**: http://localhost:3000/api/openapi.yaml (o `/api/openapi.json`)
+
+Para validarla y generar una página HTML estática que se puede publicar (por ejemplo en GitHub Pages):
+
+```bash
+npm run docs:lint    # valida openapi.yaml con Redocly CLI
+npm run docs:build   # genera packages/api/docs-dist/index.html (no se versiona)
+```
+
 ### Frontends
 
 Cada frontend se arranca de forma independiente. Todos hacen proxy de `/api` hacia `http://localhost:3000`:
@@ -95,6 +109,7 @@ npm run dev:clientes    # → http://localhost:4202
 | Servicio | Puerto | URL |
 | --- | --- | --- |
 | API | 3000 | http://localhost:3000 |
+| Documentación API (Swagger UI) | 3000 | http://localhost:3000/api/docs |
 | Web Admin | 4200 | http://localhost:4200 |
 | Web Empleados | 4201 | http://localhost:4201 |
 | Web Clientes | 4202 | http://localhost:4202 |

@@ -263,6 +263,8 @@ La excepción es `employee`: como sus rutas están repartidas en tres ficheros, 
 
 Todos cuelgan de `/api/v1`. La columna **Roles** indica qué valores de `req.user.role` acepta `authorize()`; “autenticado” significa que basta con un JWT válido, sin filtro de rol.
 
+La referencia completa (cuerpos, parámetros, respuestas y errores) está en la especificación OpenAPI 3.1 [`packages/api/openapi.yaml`](../../packages/api/openapi.yaml), mantenida a mano. La API la sirve en `GET /api/openapi.yaml` y `GET /api/openapi.json`, con Swagger UI en `/api/docs`; `npm run docs:lint` la valida y `npm run docs:build` genera una página HTML estática en `packages/api/docs-dist/` para publicarla. **Todo endpoint nuevo o modificado debe añadirse a `openapi.yaml`**: el test `src/openapi.test.ts` compara las rutas montadas en `app.ts` con las del documento y falla si no coinciden.
+
 ### Públicos (sin autenticación)
 
 | Método | Ruta | Descripción |
@@ -430,5 +432,6 @@ Con **Vitest** (`npm test` desde la raíz, o `npm run test:watch` dentro de `pac
 - Dominio y casos de uso de `employee`, con dobles en `contexts/employee/application/mocks/`
 - Servicios y repositorios de `restaurant`, `ingredient`, `order` y `table`, con dobles en `repositories/mocks/`
 - Middlewares y `errorHandler`, llamándolos directamente con `req`/`res` simulados
+- `src/openapi.test.ts`: comprueba que `openapi.yaml` es OpenAPI 3, que sus `$ref` existen y que documenta exactamente las rutas que monta `app.ts` (lee los routers, no hace peticiones HTTP)
 
 **No hay tests de integración HTTP.** `supertest` figura como dependencia de desarrollo pero no se usa en ningún test, así que las rutas no están cubiertas.

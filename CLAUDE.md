@@ -24,6 +24,8 @@ npm run dev:admin        # ng serve with proxy → :4200
 npm run dev:empleados    # → :4201
 npm run dev:clientes     # → :4202
 npm test                 # vitest run (API only; the frontends have no tests)
+npm run docs:lint        # validate packages/api/openapi.yaml (Redocly CLI via npx)
+npm run docs:build       # static API docs → packages/api/docs-dist/index.html
 ```
 
 To run a single test file or a single test, from `packages/api`:
@@ -60,6 +62,7 @@ Things to keep in mind:
 
 - **Imports**: imports use tsconfig path aliases (`@config/*`, `@errors/*`, `@shared/*`, `@employee/*`, `@models/*`, `@repositories/*`, `@services/*`, `@controllers/*`, `@routes/*`, `@scripts/*`). They must end in `.js` because the package is ESM with `module: nodenext`. At runtime `tsx` resolves the aliases; in tests `vite-tsconfig-paths` does.
 - **Routing**: all routes are mounted in `src/app.ts` under `/api/v1`. Nested routers such as `/restaurants/:restaurantId/...` need `Router({ mergeParams: true })`.
+- **OpenAPI**: `packages/api/openapi.yaml` (OpenAPI 3.1, hand-maintained, descriptions in Spanish) documents every endpoint. It is served at `/api/docs` (Swagger UI) and `/api/openapi.yaml`. **When you add or change an endpoint, update `openapi.yaml` too** (path, roles in `x-roles`, body, responses). `src/openapi.test.ts` fails if the routes mounted in `app.ts` and the documented paths differ. Validate with `npm run docs:lint`; `npm run docs:build` writes static HTML to `packages/api/docs-dist/` (gitignored).
 - **Errors**: domain errors extend `AppError` (`src/errors/DomainErrors.ts`). `errorHandler` picks the HTTP status by error class name: an explicit list maps to 404, `InvalidCredentialsError` to 401, the `CONFLICT_ERRORS` list to 409, any other `AppError` to 400, everything else to 500. The body is `{ error: <class name>, message }`. **A new not-found error must be added to the 404 list in `errorHandler.ts`, and a new conflict error to `CONFLICT_ERRORS`.** `OrderController` is the exception: it uses its own try/catch and never calls `next(error)`.
 - **Database**: `src/config/database.ts` exports one shared `dbConfig` instance. Migrations are `CREATE TABLE IF NOT EXISTS` statements in `runInitialMigrations()`, and there is no separate migration tool. `PRAGMA foreign_keys = ON` is set, so test fixtures must insert parent rows (for example `restaurants`) before child rows. The DB file is `packages/api/resttek.db`; with `NODE_ENV=test` it is `:memory:`. SQL renames snake_case to camelCase with column aliases.
 - **Orders**: creating an order expands quantities, so `quantity: 3` is stored as 3 `order_items` rows with quantity 1 each. This lets each unit's status be tracked on its own. Order routes have no `authorize()`, only `authenticate`.
