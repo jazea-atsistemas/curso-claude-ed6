@@ -120,7 +120,7 @@ Tras ejecutar `npm run seed`, estas credenciales están disponibles. **La contra
 
 Por ejemplo, para entrar como admin: usuario `admin@resttek.com`, contraseña `admin@resttek.com`.
 
-`seed` usa `INSERT OR IGNORE`, así que puedes ejecutarlo varias veces sin duplicar los datos de prueba. Al terminar imprime la lista completa de credenciales por consola.
+`seed` borra primero todos los datos de todas las tablas (dentro de una transacción, sin tocar el esquema) y después vuelve a insertar los datos de prueba. Puedes ejecutarlo varias veces sin duplicar nada, pero **se pierde cualquier dato creado o modificado a mano**. Al terminar imprime la lista completa de credenciales por consola.
 
 ---
 
