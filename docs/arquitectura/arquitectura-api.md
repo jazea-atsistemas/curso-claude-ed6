@@ -51,7 +51,7 @@ contexts/employee/
 
 `contexts/shared/` no es un bounded context de negocio: contiene el value object `Email` y los middlewares y el `errorHandler` de Express.
 
-### 2. Por capas → `restaurant`, `dish`, `ingredient`, `order`, `table`
+### 2. Por capas → `restaurant`, `dish`, `ingredient`, `order`, `table`, `points`
 
 El resto de dominios **no** usan bounded contexts. Se organizan en carpetas transversales por tipo de fichero:
 
@@ -343,13 +343,52 @@ El contrato completo (cuerpos, ejemplos y códigos de error) está en [`docs/api
 | `GET` | `/api/v1/orders/:id` | autenticado |
 | `PATCH` | `/api/v1/orders/:orderId/items/:itemId/status` | autenticado — devuelve 204 sin cuerpo |
 
-Ninguna ruta de pedidos aplica `authorize()`: cualquier usuario autenticado puede cambiar el estado de cualquier ítem.
+| `POST` | `/api/v1/orders/:id/bill` | cliente — pedir la cuenta de un pedido propio |
+
+Salvo `/bill`, ninguna ruta de pedidos aplica `authorize()`: cualquier usuario autenticado puede cambiar el estado de cualquier ítem.
 
 `GET /orders/active` devuelve los pedidos del restaurante que tengan **al menos un ítem** en estado distinto de `entregado`. Cada pedido trae **todos** sus ítems, también los `entregado`.
 
 Si el pedido trae `tableId`, la mesa debe pertenecer a `restaurantId` y estar `ocupada`. Si no existe o es de otro restaurante, responde 400 `TableNotFoundError`; si está `libre` o `reservada`, 400 `TableNotAvailableError`. `GET /orders/active`, `/orders/mine`, `/orders/:id` y la respuesta 201 de `POST /orders` incluyen `tableNumber` (`LEFT JOIN tables`), que es `null` si el pedido no tiene mesa o si `tableId` no corresponde a ninguna mesa.
 
 Al crear un pedido, el servicio **expande las cantidades**: un ítem con `quantity: 3` se guarda como 3 filas de `order_items` con `quantity: 1` cada una, para poder seguir el estado de cada unidad por separado.
+
+#### Pedir la cuenta (`POST /orders/:id/bill`)
+
+Lo gestionan `BillController` (que sí delega en el `errorHandler` con `next(error)`) y `BillService.requestBill(orderId, clientId)`:
+
+1. Carga el pedido. Si no existe, no tiene `clientId` o es de otro cliente → 404 `OrderNotFoundError` (no se revela que existe).
+2. Si ya tiene `billedAt` → 409 `OrderAlreadyBilledError`.
+3. `subtotal = calculateOrderTotal(order.items)` (función pura de `models/order.model.ts`: suma `dishPrice * quantity` en céntimos).
+4. `total = applyAdjustments(order, subtotal)`: **punto de extensión** para descuentos (códigos, canje de puntos). Hoy devuelve el subtotal.
+5. `pointsEarned = PointsService.calculatePointsFor(restaurantId, total)`.
+6. `OrderRepository.markAsBilled(orderId, { total, pointsEarned, billedAt })`: `UPDATE ... WHERE billed_at IS NULL` condicional; si no cambia ninguna fila (otra petición se adelantó) → 409.
+7. `PointsService.addPoints(clientId, restaurantId, pointsEarned)` suma los puntos al saldo.
+
+No exige que los ítems estén entregados. Respuesta 200:
+
+```json
+{ "orderId": "…", "restaurantId": "rest-1", "clientId": "…", "subtotal": 34, "total": 34,
+  "pointsEarned": 3, "pointsBalance": 3, "billedAt": "2026-10-22T18:11:15.737Z" }
+```
+
+`GET /orders/mine`, `/orders/:id` y `/orders/active` incluyen `total`, `pointsEarned` y `billedAt` (los tres `null` mientras no se pide la cuenta).
+
+### Puntos
+
+| Método | Ruta | Roles | Restaurante |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/restaurants/:restaurantId/points-rule` | admin, manager | sí |
+| `PUT` | `/api/v1/restaurants/:restaurantId/points-rule` | admin, manager | sí |
+| `DELETE` | `/api/v1/restaurants/:restaurantId/points-rule` | admin, manager | sí |
+| `GET` | `/api/v1/points/mine` | cliente | no |
+
+- La regla de un restaurante es "por cada `spendAmount` € gastados, `pointsAwarded` puntos". `GET` devuelve `{ restaurantId, spendAmount, pointsAwarded, updatedAt }` o `null` (200) si no hay regla; 404 `RestaurantNotFoundError` si el restaurante no existe.
+- `PUT` recibe `{ spendAmount, pointsAwarded }` y crea o sustituye la regla (200 con la regla). `spendAmount` debe ser un número ≥ 0,01 y `pointsAwarded` un entero ≥ 1; si no, 400 `InvalidPointsRuleError`.
+- `DELETE` quita la regla (204): el restaurante deja de dar puntos, pero los clientes conservan su saldo.
+- `GET /points/mine` devuelve el saldo del cliente del JWT en cada restaurante donde tiene puntos: `[{ restaurantId, restaurantName, balance, updatedAt }]`, ordenado por nombre de restaurante.
+- Puntos ganados = `floor(total / spendAmount) * pointsAwarded` (`calculatePointsEarned()` en `models/points.model.ts`, en céntimos). Sin regla no se ganan puntos.
+- `PointsService` expone `getRule`, `saveRule`, `deleteRule`, `calculatePointsFor(restaurantId, amount)`, `addPoints(clientId, restaurantId, points)` (admite negativos, pensado para canjear), `awardPoints` (calcular + sumar), `getClientBalance` y `getClientBalances`.
 
 ---
 
@@ -371,15 +410,15 @@ Los tres responden directamente, sin pasar por el `errorHandler`. `authorizeRest
 
 Jerarquía: `Error` → `AppError` (abstracta) → errores específicos en `errors/DomainErrors.ts`. `AppError` asigna `this.name = this.constructor.name`, y el `errorHandler` decide el código HTTP a partir de ese nombre:
 
-- **404**: `EmployeeNotFoundError`, `RestaurantNotFoundError`, `IngredientNotFoundError`, `DishNotFoundError`, `TableNotFoundError`
-- **409** (`CONFLICT_ERRORS`): `DuplicatedTableNumberError`, `TableNotAvailableError`, `TableOccupiedError`
+- **404**: `EmployeeNotFoundError`, `RestaurantNotFoundError`, `IngredientNotFoundError`, `DishNotFoundError`, `TableNotFoundError`, `OrderNotFoundError`
+- **409** (`CONFLICT_ERRORS`): `DuplicatedTableNumberError`, `TableNotAvailableError`, `TableOccupiedError`, `OrderAlreadyBilledError`
 - **401**: `InvalidCredentialsError`
 - **400**: cualquier otro `AppError`
 - **500**: errores no controlados
 
 Dos excepciones que conviene conocer:
 
-- `OrderNotFoundError` **no** está en la lista de 404. Si llegase al `errorHandler` se traduciría a 400.
+- `OrderNotFoundError` está en la lista de 404, pero solo lo aprovecha `BillController`: `OrderController` no pasa por el `errorHandler`.
 - `OrderController` no delega en el `errorHandler`: es el único controlador que **no llama a `next(error)`**, sino que hace su propio `try/catch` y construye la respuesta a mano. Por eso `GET /orders/:id` sí devuelve 404, pero el `PATCH` de estado devuelve 400 para el mismo error.
 - El cuerpo de error del `errorHandler` es `{ error: <nombre de la clase>, message }`. `POST /orders` devuelve la misma forma, siempre con 400. El resto de handlers de `OrderController` devuelven `{ error: <mensaje> }`.
 
@@ -410,7 +449,7 @@ Los imports llevan extensión `.js` (`import { dbConfig } from '@config/database
 
 La clase `Database` (`config/database.ts`) encapsula `sqlite3` con una API basada en promesas:
 
-- `initialize()`: abre la conexión y ejecuta `runInitialMigrations()` (`CREATE TABLE IF NOT EXISTS`)
+- `initialize()`: abre la conexión y ejecuta `runInitialMigrations()` (`CREATE TABLE IF NOT EXISTS`, y `addColumnIfMissing()` para las columnas añadidas después a tablas existentes, como `orders.total`)
 - `run()`: INSERT/UPDATE/DELETE
 - `all<T>()`: SELECT de múltiples filas
 - `get<T>()`: SELECT de una fila
@@ -428,7 +467,8 @@ La ruta del fichero se decide en el constructor: `:memory:` si `NODE_ENV=test`, 
 Con **Vitest** (`npm test` desde la raíz, o `npm run test:watch` dentro de `packages/api`). Los tests son unitarios y conviven con el código que prueban:
 
 - Dominio y casos de uso de `employee`, con dobles en `contexts/employee/application/mocks/`
-- Servicios y repositorios de `restaurant`, `ingredient`, `order` y `table`, con dobles en `repositories/mocks/`
+- Servicios y repositorios de `restaurant`, `ingredient`, `order`, `table` y `points` (incluido `BillService`), con dobles en `repositories/mocks/`
+- Funciones puras de los modelos (`calculateOrderTotal`, `calculatePointsEarned`, `normalizeTableStatus`)
 - Middlewares y `errorHandler`, llamándolos directamente con `req`/`res` simulados
 
 **No hay tests de integración HTTP.** `supertest` figura como dependencia de desarrollo pero no se usa en ningún test, así que las rutas no están cubiertas.

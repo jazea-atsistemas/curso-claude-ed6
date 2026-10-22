@@ -48,7 +48,7 @@ The API mixes **two architectural styles**. Check which one a domain uses before
    - Use cases are classes with one `execute()` method and constructor injection.
    - Interfaces use an `I` prefix (`IEmployeeRepository`, `IAuthService`).
    - Dependencies are wired in `infrastructure/http/dependencies.ts`.
-2. **Layered, for `restaurant`, `dish`, `ingredient`, `order`, `table`** (`src/{models,repositories,services,controllers,routes}/<domain>.*.ts`)
+2. **Layered, for `restaurant`, `dish`, `ingredient`, `order`, `table`, `points`** (plus `bill` for requesting an order's bill) (`src/{models,repositories,services,controllers,routes}/<domain>.*.ts`)
    - Models are plain interfaces. Enums are validated by the `normalizeX()` functions in `models/`.
    - Each service has several methods, and validation lives in the service.
    - A repository interface has no `I` prefix and sits in the same file as its `Sqlite*` implementation.

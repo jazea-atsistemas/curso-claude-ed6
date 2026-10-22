@@ -52,14 +52,15 @@ src/app/
 ├── app.routes.ts
 ├── core/
 │   ├── layout/            → shell.component.ts
-│   ├── models/            → dish, order, restaurant, table
-│   ├── services/          → dish, order, restaurant, table
+│   ├── models/            → dish, order, points, restaurant, table
+│   ├── services/          → dish, order, points, restaurant, table
 │   └── store/             → cart.store.ts
 └── features/
     ├── cart/cart.component.ts
     ├── menu/restaurant-menu.component.ts
     ├── orders/my-orders.component.ts
     ├── orders/order-detail.component.ts
+    ├── points/my-points.component.ts
     ├── restaurants/restaurant-list.component.ts
     └── tables/table-select.component.ts
 ```
@@ -116,6 +117,11 @@ Caso particular en `web-empleados`:
 - **`web-empleados`**: página `/mesas` (camarero, manager y cocinero). Muestra cada mesa con su estado y, para las ocupadas, los ítems no `entregado` de sus pedidos activos (cruza `OrderStore.orders()` por `tableId`; `GET /orders/active` devuelve también los ítems entregados). Solo camarero y manager ven los botones de cambio de estado. Cocina, barra y salón muestran `Mesa {tableNumber}`.
 - **`web-clientes`**: tras elegir restaurante se va a `restaurants/:id/mesa` (`TableSelectComponent`): nº de personas → `GET /available` → "Continuar" llama a `POST /{id}/occupy` (un 409 recarga la lista con "Esa mesa acaba de ocuparse"). `CartStore` guarda la mesa en `sessionStorage` (`resttek.table`, siempre en `try/catch`). La carta redirige a `/mesa` si no hay mesa para ese restaurante, y `/mesa` redirige a la carta si ya la hay. El pedido envía `tableId`; un 400 `TableNotAvailableError`/`TableNotFoundError` limpia la mesa y vuelve a la selección. Las mesas solo las libera el personal.
 
+### Cuenta y puntos
+
+- **`web-admin`**: feature `features/points` (`models`, `services/points-rule.service.ts`, `store/points-rule.store.ts`, `pages/points-rule`) montado en `restaurants/:restaurantId/points`, sin fichero de rutas propio (una sola página). Formulario "Por cada (€)" / "Puntos que se ganan" sobre `GET/PUT/DELETE /restaurants/:restaurantId/points-rule`; "Desactivar" borra la regla. `PointsRuleStore` guarda la regla del restaurante actual (o `null`) y descarta respuestas de otro restaurante, como `TableStore`. Enlace "Puntos" en el submenú del restaurante y en el panel.
+- **`web-clientes`**: en `order-detail` un botón "Pedir la cuenta" (`OrderService.requestBill()` → `POST /orders/:id/bill`) mientras el pedido no tenga `billedAt`; después muestra el total cobrado y los puntos ganados (y el saldo, en la misma visita). Un 409 recarga el pedido. Página `/points` (`MyPointsComponent`, enlace "Mis Puntos" en la cabecera) con el saldo por restaurante de `PointsService.getMyPoints()` → `GET /points/mine`.
+
 ### `web-clientes`: el patrón Store casi no se usa
 
 En `web-clientes` el patrón Store **no es la norma**: el único store real es `CartStore`, y es puramente local (sin HTTP) — vacía el carrito si añades un plato de otro restaurante, pero no envuelve ninguna llamada a la API.
@@ -126,7 +132,8 @@ Para todo lo demás (restaurantes, carta/platos, confirmación y consulta de ped
 - `restaurant-menu.component.ts` → `RestaurantService.getById()` y `DishService.getByRestaurant()`
 - `cart.component.ts` (`confirmOrder()`) → `OrderService.createOrder()`
 - `my-orders.component.ts` → `OrderService.getMyOrders()`, con **polling cada 10 s** mediante `setInterval`/`clearInterval` en el propio componente
-- `order-detail.component.ts` → `OrderService.getOrderById()`, con **polling cada 5 s**, también con `setInterval`/`clearInterval` en el propio componente
+- `order-detail.component.ts` → `OrderService.getOrderById()`, con **polling cada 5 s**, también con `setInterval`/`clearInterval` en el propio componente, y `OrderService.requestBill()`
+- `my-points.component.ts` → `PointsService.getMyPoints()`
 
 ---
 

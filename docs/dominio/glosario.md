@@ -18,6 +18,9 @@ Terminología del dominio y conceptos técnicos utilizados en el proyecto Restte
 | **Order** | Pedido realizado por un cliente. Contiene ítems (platos) y está asociado a un restaurante. |
 | **OrderItem** | Línea de un pedido: un plato con cantidad, notas opcionales y estado. |
 | **Table** | Mesa de un restaurante. Tiene número (único por restaurante), descripción opcional, capacidad y estado. Un pedido puede asociarse a una mesa `ocupada` de su restaurante. |
+| **Cuenta (Bill)** | Cierre de un pedido: el cliente "pide la cuenta" y se calcula y guarda el `total` del pedido (`billedAt`). Solo se puede pedir una vez por pedido. Es el momento en que se ganan puntos. |
+| **PointsRule (regla de puntos)** | Configuración de un restaurante: por cada X € (`spendAmount`) gastados, Y puntos (`pointsAwarded`). La gestionan el admin y el manager del restaurante. Sin regla, el restaurante no da puntos. |
+| **Puntos (ClientPoints)** | Saldo de fidelización de un cliente **en un restaurante concreto**: los puntos de un restaurante no se mezclan con los de otro. Al pedir la cuenta se suman `floor(total / X) * Y`. |
 
 Dos particularidades del modelo que conviene tener presentes:
 
