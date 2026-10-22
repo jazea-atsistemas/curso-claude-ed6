@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import jwt from 'jsonwebtoken'
 import type { Response, NextFunction } from 'express'
-import { authenticate, type AuthRequest } from './middlewares.js'
+import { authenticate, authorizeRestaurant, restaurantScope, type AuthRequest } from './middlewares.js'
 import { JWT_SECRET, JWT_ISSUER, JWT_AUDIENCE } from '@config/env.js'
 
 const payload = { id: 'user-1', role: 'manager' }
@@ -96,5 +96,93 @@ describe('authenticate', () => {
     it('responde 401 si el token no tiene issuer ni audience', () => {
         const token = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256', expiresIn: '1h' })
         expectUnauthorized(run(`Bearer ${token}`))
+    })
+})
+
+const runAuthorizeRestaurant = (
+    user: AuthRequest['user'],
+    params: Record<string, string> = { restaurantId: 'rest-A' },
+    paramName?: string
+) => {
+    const req = { user, params } as unknown as AuthRequest
+    const json = vi.fn()
+    const status = vi.fn().mockReturnValue({ json })
+    const res = { status } as unknown as Response
+    const next = vi.fn() as unknown as NextFunction
+    authorizeRestaurant(paramName)(req, res, next)
+    return { status, json, next }
+}
+
+describe('authorizeRestaurant', () => {
+    it('deja pasar al admin a cualquier restaurante', () => {
+        const result = runAuthorizeRestaurant({ id: 'a', role: 'admin', restaurantId: null })
+
+        expect(result.next).toHaveBeenCalledOnce()
+        expect(result.status).not.toHaveBeenCalled()
+    })
+
+    it('deja pasar al personal del mismo restaurante', () => {
+        const result = runAuthorizeRestaurant({ id: 'm', role: 'manager', restaurantId: 'rest-A' })
+
+        expect(result.next).toHaveBeenCalledOnce()
+        expect(result.status).not.toHaveBeenCalled()
+    })
+
+    it('responde 403 al personal de otro restaurante', () => {
+        const result = runAuthorizeRestaurant({ id: 'm', role: 'manager', restaurantId: 'rest-B' })
+
+        expect(result.status).toHaveBeenCalledWith(403)
+        expect(result.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Forbidden' }))
+        expect(result.next).not.toHaveBeenCalled()
+    })
+
+    it('responde 403 a un usuario no admin sin restaurantId', () => {
+        const result = runAuthorizeRestaurant({ id: 'm', role: 'manager', restaurantId: null })
+
+        expect(result.status).toHaveBeenCalledWith(403)
+        expect(result.next).not.toHaveBeenCalled()
+    })
+
+    it('responde 403 si no hay usuario', () => {
+        const result = runAuthorizeRestaurant(undefined)
+
+        expect(result.status).toHaveBeenCalledWith(403)
+        expect(result.next).not.toHaveBeenCalled()
+    })
+
+    it('responde 403 si la ruta no trae el parámetro del restaurante', () => {
+        const result = runAuthorizeRestaurant({ id: 'm', role: 'manager', restaurantId: 'rest-A' }, {})
+
+        expect(result.status).toHaveBeenCalledWith(403)
+        expect(result.next).not.toHaveBeenCalled()
+    })
+
+    it('permite indicar el nombre del parámetro (por ejemplo id)', () => {
+        const allowed = runAuthorizeRestaurant({ id: 'm', role: 'manager', restaurantId: 'rest-A' }, { id: 'rest-A' }, 'id')
+        const denied = runAuthorizeRestaurant({ id: 'm', role: 'manager', restaurantId: 'rest-A' }, { id: 'rest-B' }, 'id')
+
+        expect(allowed.next).toHaveBeenCalledOnce()
+        expect(denied.status).toHaveBeenCalledWith(403)
+    })
+})
+
+describe('restaurantScope', () => {
+    const scope = (user: AuthRequest['user'], query: Record<string, unknown> = {}) =>
+        restaurantScope({ user, params: {}, query } as unknown as AuthRequest)
+
+    it('devuelve el restaurantId del token para el personal, ignorando la query', () => {
+        expect(scope({ role: 'cocinero', restaurantId: 'rest-A' }, { restaurantId: 'rest-B' })).toBe('rest-A')
+    })
+
+    it('permite al admin elegir el restaurante por query', () => {
+        expect(scope({ role: 'admin', restaurantId: null }, { restaurantId: 'rest-B' })).toBe('rest-B')
+    })
+
+    it('devuelve undefined si el admin no indica restaurante', () => {
+        expect(scope({ role: 'admin', restaurantId: null })).toBeUndefined()
+    })
+
+    it('ignora una query que no sea un string', () => {
+        expect(scope({ role: 'admin', restaurantId: null }, { restaurantId: ['a', 'b'] })).toBeUndefined()
     })
 })

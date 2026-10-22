@@ -42,3 +42,27 @@ export const authorize = (roles: string[]) => {
         next()
     }
 }
+
+export const authorizeRestaurant = (paramName = 'restaurantId') => {
+    return (req: AuthRequest, res: Response, next: NextFunction): void => {
+        const user = req.user
+        if (user?.role === 'admin') {
+            next()
+            return
+        }
+        const target = req.params[paramName]
+        if (!user || !user.restaurantId || user.restaurantId !== target) {
+            res.status(403).json({ error: 'Forbidden', message: 'No tienes acceso a este restaurante' })
+            return
+        }
+        next()
+    }
+}
+
+export const restaurantScope = (req: AuthRequest): string | undefined => {
+    if (req.user?.role === 'admin') {
+        const requested = req.params.restaurantId ?? req.query.restaurantId
+        return typeof requested === 'string' ? requested : undefined
+    }
+    return req.user?.restaurantId ?? undefined
+}
