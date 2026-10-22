@@ -1,0 +1,11 @@
+# Configuración de Redocly CLI para validar y publicar openapi.yaml
+extends:
+  - recommended
+
+rules:
+  # El proyecto no declara licencia
+  info-license: off
+  # El único servidor es el de desarrollo local (http://localhost:3000)
+  no-server-example.com: off
+  # /health y las rutas públicas de lectura no tienen respuestas 4xx
+  operation-4xx-response: off
